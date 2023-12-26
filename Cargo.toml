@@ -1,0 +1,12 @@
+[package]
+name = "mdict-cli-rs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.76"
+mdict = { git = "https://github.com/lengyijun/mdict", branch = "mdd" }
+tempfile = "3.8.1"
+
