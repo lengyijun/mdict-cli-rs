@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
-use html_parser::Dom;
-use mdict::Mdx;
+use ego_tree::NodeRef;
+use mdict::MDict;
+use rayon::prelude::*;
+use scraper::{Html, Node};
+use std::sync::mpsc::channel;
 use std::{
     collections::HashSet,
     env::{self},
@@ -15,54 +18,72 @@ use walkdir::WalkDir;
 fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
 
-    let mut dicts = load_dict()
-        .into_iter()
-        .filter_map(|dict| Mdx::from(&dict).map(|m| (dict, m)).ok())
-        .collect::<Vec<_>>();
+    let (sender, receiver) = channel();
 
-    let results: Vec<_> = dicts
-        .iter_mut()
-        .filter_map(|(p, ref mut mdx)| {
-            if let Ok(Some(definition)) = mdx.lookup_as_string(&word) {
-                Some((p.clone(), definition))
-            } else {
-                None
-            }
-        })
-        .collect();
+    load_dict().into_par_iter().for_each_with(sender, |s, p| {
+        let Ok(mut mdx) = MDict::from(&p) else {
+            return;
+        };
+        if let Ok(Some(definition)) = mdx.lookup(&word) {
+            s.send((p, definition.definition)).unwrap();
+        }
+    });
+
+    let results: Vec<_> = receiver.iter().collect();
 
     let items: Vec<_> = results.iter().map(|(p, _)| p.to_str().unwrap()).collect();
-    let selection = dialoguer::Select::new()
-        .with_prompt("What do you choose?")
-        .items(&items)
-        .interact()
-        .unwrap();
 
-    let temp_dir = tempdir()?;
-    let index_html = temp_dir.path().join("index.html");
-    File::create(&index_html)?.write_all(results[selection].1.as_bytes())?;
+    if items.is_empty() {
+        eprintln!("not found");
+        return Ok(());
+    }
 
-    let mut resources: HashSet<&str> = HashSet::new();
-    let dom = Dom::parse(&results[selection].1)?;
-    for (k, v) in dom
-        .children
-        .iter()
-        .filter_map(|node| node.element())
-        .flat_map(|element| &element.attributes)
-    {
-        let Some(v) = v else { continue };
-        if (k == "href" || k == "src") && (v.ends_with(".js") || v.ends_with(".css")) {
-            resources.insert(v);
+    if items.len() == 1 {
+        println!("only found in {:?}", results[0].0);
+        fun_name(&results[0])?;
+    } else {
+        loop {
+            let selection = dialoguer::Select::new()
+                .with_prompt("What do you choose?")
+                .items(&items)
+                .interact()
+                .unwrap();
+
+            fun_name(&results[selection])?;
         }
     }
 
-    let mdd_path = results[selection].0.with_extension("mdd");
-    if let Ok(mut mdd) = Mdx::from(&mdd_path) {
+    Ok(())
+}
+
+fn dfs(root: NodeRef<Node>, hm: &mut HashSet<String>) {
+    if let Node::Element(e) = root.value() {
+        for (_, v) in e.attrs() {
+            if v.ends_with(".css") || v.ends_with(".js") {
+                hm.insert(v.to_owned());
+            }
+        }
+    }
+    for x in root.children() {
+        dfs(x, hm);
+    }
+}
+
+fn fun_name(selected: &(PathBuf, String)) -> Result<()> {
+    let temp_dir = tempdir()?;
+    let index_html = temp_dir.path().join("index.html");
+    File::create(&index_html)?.write_all(selected.1.as_bytes())?;
+
+    let mdd_path = selected.0.with_extension("mdd");
+    if let Ok(mut mdd) = MDict::from(&mdd_path) {
+        let mut resources: HashSet<String> = HashSet::new();
+        let dom = Html::parse_document(&selected.1);
+        dfs(dom.tree.root(), &mut resources);
         for resource in resources {
             let p = {
-                let mut p = results[selection].0.clone();
+                let mut p = selected.0.clone();
                 p.pop();
-                p.push(resource);
+                p.push(&resource);
                 p
             };
             if p.exists() {
@@ -74,7 +95,7 @@ fn main() -> Result<()> {
                 continue;
             }
 
-            let mut resource = resource.to_owned();
+            let mut resource = resource;
             if !resource.starts_with('/') {
                 resource = "/".to_owned() + &resource;
             }
@@ -82,7 +103,7 @@ fn main() -> Result<()> {
                 let dest = temp_dir.path().join(&resource[1..]);
                 File::create(&dest)
                     .with_context(|| format!("fail to create {:?}", dest))?
-                    .write_all(x.definition)?;
+                    .write_all(x.definition.as_bytes())?;
             } else {
                 eprintln!("failed to load {resource}");
             }
@@ -90,9 +111,7 @@ fn main() -> Result<()> {
     } else {
         eprintln!("{:?} not exists", mdd_path);
     }
-
     Command::new("carbonyl").arg(index_html).status()?;
-
     Ok(())
 }
 
@@ -101,7 +120,7 @@ fn load_dict() -> Vec<PathBuf> {
 
     let mut v = Vec::new();
 
-    for entry in WalkDir::new(d).max_depth(2) {
+    for entry in WalkDir::new(d).follow_links(true) {
         let Ok(entry) = entry else { continue };
         if !entry.file_type().is_dir() && entry.file_name().to_str().unwrap().ends_with(".mdx") {
             v.push(PathBuf::from(entry.path()));
