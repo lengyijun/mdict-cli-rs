@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use ego_tree::NodeRef;
-use mdict::MDict;
+use mdict::{KeyMaker, MDictBuilder};
 use rayon::prelude::*;
 use scraper::{Html, Node};
 use std::sync::mpsc::channel;
@@ -15,13 +15,27 @@ use std::{
 use tempfile::tempdir;
 use walkdir::WalkDir;
 
+struct MyKeyMaker;
+
+impl KeyMaker for MyKeyMaker {
+    fn make(&self, key: &std::borrow::Cow<str>, _resource: bool) -> String {
+        fn strip_punctuation(w: &str) -> String {
+            w.to_lowercase()
+                .chars()
+                .filter(|c| !c.is_ascii_punctuation() && !c.is_whitespace())
+                .collect()
+        }
+        strip_punctuation(key)
+    }
+}
+
 fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
 
     let (sender, receiver) = channel();
 
     load_dict().into_par_iter().for_each_with(sender, |s, p| {
-        let Ok(mut mdx) = MDict::from(&p) else {
+        let Ok(mut mdx) = MDictBuilder::new(&p).build_with_key_maker(MyKeyMaker) else {
             return;
         };
         if let Ok(Some(definition)) = mdx.lookup(&word) {
@@ -75,7 +89,7 @@ fn fun_name(selected: &(PathBuf, String)) -> Result<()> {
     File::create(&index_html)?.write_all(selected.1.as_bytes())?;
 
     let mdd_path = selected.0.with_extension("mdd");
-    if let Ok(mut mdd) = MDict::from(&mdd_path) {
+    if let Ok(mut mdd) = MDictBuilder::new(&mdd_path).build_with_key_maker(MyKeyMaker) {
         let mut resources: HashSet<String> = HashSet::new();
         let dom = Html::parse_document(&selected.1);
         dfs(dom.tree.root(), &mut resources);
