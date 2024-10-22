@@ -59,7 +59,9 @@ fn main() -> Result<()> {
         .into_iter()
         .map(|(p, _)| {
             let name = p.file_name().unwrap().to_str().unwrap();
-            format!(r#"<button onclick="changeIframeSrc('{name}/index.html')">{name}</button>"#)
+            format!(
+                r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{name}</button>"#
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -72,7 +74,7 @@ fn main() -> Result<()> {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scrollable Button List with iframe</title>
+  <title>Scrollable Button List with iframe and Active Button</title>
   <style>
     /* 页面布局 */
     body {{
@@ -109,6 +111,15 @@ fn main() -> Result<()> {
       background-color: #0056b3;
     }}
 
+    /* 点击后激活状态的按钮样式 */
+    .sidebar button.active {{
+      background-color: #28a745;
+    }}
+
+    .sidebar button.visited {{
+      background-color: gray;
+    }}
+
     /* 右边的 iframe */
     .content {{
       flex-grow: 1;
@@ -135,9 +146,24 @@ fn main() -> Result<()> {
   </div>
 
   <script>
-    // 更改 iframe 的 src
-    function changeIframeSrc(newSrc) {{
+    // 更改 iframe 的 src 并改变按钮颜色
+    function changeIframeSrc(newSrc, clickedButton) {{
       document.getElementById('myIframe').src = newSrc;
+
+      // 获取所有按钮
+      var buttons = document.querySelectorAll('.sidebar button');
+
+      // 移除所有按钮的 active 类
+      buttons.forEach(function(button) {{
+        if(button.classList.contains('active')){{
+          button.classList.remove('active');
+          button.classList.add('visited');
+    }}
+    }});
+
+      // 为点击的按钮添加 active 类
+      clickedButton.classList.remove('visited');
+      clickedButton.classList.add('active');
     }}
   </script>
 
