@@ -3,6 +3,7 @@ use ego_tree::NodeRef;
 use mdict::{KeyMaker, MDictBuilder};
 use rayon::prelude::*;
 use scraper::{Html, Node};
+use std::path::Path;
 use std::sync::mpsc::channel;
 use std::{
     collections::HashSet,
@@ -12,7 +13,6 @@ use std::{
     path::PathBuf,
     process::Command,
 };
-use tempfile::tempdir;
 use walkdir::WalkDir;
 
 struct MyKeyMaker;
@@ -31,6 +31,7 @@ impl KeyMaker for MyKeyMaker {
 
 fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
+    let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
 
     let (sender, receiver) = channel();
 
@@ -45,28 +46,108 @@ fn main() -> Result<()> {
 
     let results: Vec<_> = receiver.iter().collect();
 
-    let items: Vec<_> = results.iter().map(|(p, _)| p.to_str().unwrap()).collect();
-
-    if items.is_empty() {
+    if results.is_empty() {
         eprintln!("not found");
         return Ok(());
     }
 
-    if items.len() == 1 {
-        println!("only found in {:?}", results[0].0);
-        fun_name(&results[0])?;
-    } else {
-        loop {
-            let selection = dialoguer::Select::new()
-                .with_prompt("What do you choose?")
-                .items(&items)
-                .interact()
-                .unwrap();
-
-            fun_name(&results[selection])?;
-        }
+    for x in &results {
+        fun_name(temp_dir.path(), x)?;
     }
 
+    let buttons: String = results
+        .into_iter()
+        .map(|(p, _)| {
+            let name = p.file_name().unwrap().to_str().unwrap();
+            format!(r#"<button onclick="changeIframeSrc('{name}/index.html')">{name}</button>"#)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let index_html = temp_dir.path().join("index.html");
+    let html = format!(
+        r#"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scrollable Button List with iframe</title>
+  <style>
+    /* 页面布局 */
+    body {{
+      display: flex;
+      height: 100vh;
+      margin: 0;
+    }}
+
+    /* 左边的按钮列 */
+    .sidebar {{
+      width: 200px;
+      background-color: #f4f4f4;
+      padding: 20px;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+      overflow-y: auto; /* 启用垂直滚动条 */
+      max-height: 100vh; /* 高度固定为视口高度 */
+    }}
+
+    /* 按钮样式 */
+    .sidebar button {{
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      background-color: #007BFF;
+      color: white;
+      border-radius: 5px;
+    }}
+
+    .sidebar button:hover {{
+      background-color: #0056b3;
+    }}
+
+    /* 右边的 iframe */
+    .content {{
+      flex-grow: 1;
+      padding: 20px;
+    }}
+
+    iframe {{
+      width: 100%;
+      height: 100%;
+      border: none;
+    }}
+  </style>
+</head>
+<body>
+
+  <!-- 左边的可滚动按钮列 -->
+  <div class="sidebar">
+   {buttons}
+  </div>
+
+  <!-- 右边显示 iframe -->
+  <div class="content">
+    <iframe id="myIframe" src="page1.html"></iframe>
+  </div>
+
+  <script>
+    // 更改 iframe 的 src
+    function changeIframeSrc(newSrc) {{
+      document.getElementById('myIframe').src = newSrc;
+    }}
+  </script>
+
+</body>
+</html>
+"#
+    );
+    File::create(&index_html)?.write_all(html.as_bytes())?;
+
+    let _ = Command::new("carbonyl").arg(index_html).status()?;
     Ok(())
 }
 
@@ -83,9 +164,12 @@ fn dfs(root: NodeRef<Node>, hm: &mut HashSet<String>) {
     }
 }
 
-fn fun_name(selected: &(PathBuf, String)) -> Result<()> {
-    let temp_dir = tempdir()?;
-    let index_html = temp_dir.path().join("index.html");
+fn fun_name(base_path: &Path, selected: &(PathBuf, String)) -> Result<()> {
+    // TODO: deal with white space, non-alpha chars
+    let base_path = base_path.join(selected.0.file_name().unwrap());
+    fs::create_dir(&base_path)?;
+
+    let index_html = base_path.join("index.html");
     File::create(&index_html)?.write_all(selected.1.as_bytes())?;
 
     let mdd_path = selected.0.with_extension("mdd");
@@ -101,11 +185,8 @@ fn fun_name(selected: &(PathBuf, String)) -> Result<()> {
                 p
             };
             if p.exists() {
-                let s = fs::read_to_string(p)?;
-                let dest = temp_dir.path().join(resource);
-                File::create(&dest)
-                    .with_context(|| format!("fail to create {:?}", dest))?
-                    .write_all(s.as_bytes())?;
+                let dest = base_path.join(resource);
+                fs::copy(p, dest)?;
                 continue;
             }
 
@@ -114,7 +195,7 @@ fn fun_name(selected: &(PathBuf, String)) -> Result<()> {
                 resource = "/".to_owned() + &resource;
             }
             if let Ok(Some(x)) = mdd.lookup(&resource.replace('/', "\\")) {
-                let dest = temp_dir.path().join(&resource[1..]);
+                let dest = base_path.join(&resource[1..]);
                 File::create(&dest)
                     .with_context(|| format!("fail to create {:?}", dest))?
                     .write_all(x.definition.as_bytes())?;
@@ -125,7 +206,6 @@ fn fun_name(selected: &(PathBuf, String)) -> Result<()> {
     } else {
         eprintln!("{:?} not exists", mdd_path);
     }
-    Command::new("carbonyl").arg(index_html).status()?;
     Ok(())
 }
 
