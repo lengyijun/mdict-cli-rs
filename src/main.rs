@@ -58,9 +58,10 @@ fn main() -> Result<()> {
     let buttons: String = results
         .into_iter()
         .map(|(p, _)| {
-            let name = p.file_name().unwrap().to_str().unwrap();
+            let display_name = p.file_name().unwrap().to_str().unwrap();
+            let name = groom_name(display_name);
             format!(
-                r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{name}</button>"#
+                r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{display_name}</button>"#
             )
         })
         .collect::<Vec<_>>()
@@ -191,9 +192,10 @@ fn dfs(root: NodeRef<Node>, hm: &mut HashSet<String>) {
 }
 
 fn fun_name(base_path: &Path, selected: &(PathBuf, String)) -> Result<()> {
-    // TODO: deal with white space, non-alpha chars
-    let base_path = base_path.join(selected.0.file_name().unwrap());
-    fs::create_dir(&base_path)?;
+    let base_path = base_path.join(groom_name(
+        selected.0.file_name().unwrap().to_str().unwrap(),
+    ));
+    fs::create_dir(&base_path).context(format!("fail to create_dir {:?}", base_path))?;
 
     let index_html = base_path.join("index.html");
     File::create(&index_html)?.write_all(selected.1.as_bytes())?;
@@ -247,4 +249,9 @@ fn load_dict() -> Vec<PathBuf> {
         }
     }
     v
+}
+
+fn groom_name(folder_name: &str) -> String {
+    // remove ' in folder_name
+    folder_name.replace(|c| c == '\'', "")
 }
