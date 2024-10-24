@@ -16,6 +16,7 @@ use walkdir::WalkDir;
 
 mod mdict_wrapper;
 mod stardict;
+mod utils;
 
 fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
@@ -189,25 +190,6 @@ fn load_dict() -> Vec<Box<dyn T>> {
         }
     }
     v
-}
-
-fn groom_name(folder_name: &str) -> String {
-    // remove ' in folder_name
-    folder_name.replace(|c| c == '\'', "")
-}
-
-fn create_sub_dir(base_dir: &Path, prefer_name: String) -> PathBuf {
-    let p = base_dir.join(&prefer_name);
-    if !p.exists() {
-        return p;
-    }
-    for i in 1.. {
-        let p = base_dir.join(format!("{prefer_name}-{i}"));
-        if !p.exists() {
-            return base_dir.join(prefer_name);
-        }
-    }
-    unreachable!()
 }
 
 trait T: Send {

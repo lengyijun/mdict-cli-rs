@@ -1,7 +1,7 @@
 //! copy and modified from https://github.com/vaaandark/dioxionary/blob/master/src/stardict.rs
 //! Look up words form the offline stardicts.
-use crate::create_sub_dir;
-use crate::groom_name;
+use crate::utils::create_sub_dir;
+use crate::utils::groom_name;
 use crate::T;
 use anyhow::{anyhow, Context, Result};
 use eio::{FromBytes, ToBytes};
