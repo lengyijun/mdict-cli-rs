@@ -11,6 +11,7 @@ use std::cmp::min;
 use std::fmt::Debug;
 use std::fs::{read, File};
 use std::io::{prelude::*, BufReader};
+use std::path::Path;
 use std::path::PathBuf;
 
 /// The stardict to be looked up.
@@ -27,10 +28,10 @@ pub struct Entry<'a> {
 }
 
 impl<'a> StarDict {
-    pub fn idx(idx_path: PathBuf) -> Result<StarDict> {
+    pub fn idx(idx_path: &Path) -> Result<StarDict> {
         let ifo = Ifo::new(idx_path.with_extension("ifo"))?;
         let dict = Dict::new(idx_path.with_extension("dz"))?;
-        let idx = Idx::new(idx_path, ifo.version())?;
+        let idx = Idx::new(idx_path.to_path_buf(), ifo.version())?;
 
         Ok(StarDict { ifo, idx, dict })
     }

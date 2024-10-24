@@ -3,6 +3,7 @@ use ego_tree::NodeRef;
 use mdict::{KeyMaker, MDictBuilder};
 use rayon::prelude::*;
 use scraper::{Html, Node};
+use stardict::StarDict;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::mpsc::channel;
@@ -259,9 +260,8 @@ fn fun_name(base_dir: &Path, selected: &(PathBuf, String)) -> Result<PathBuf> {
     Ok(base_dir)
 }
 
-/*
 // load mdict or stardict
-fn load_dict() -> Vec<PathBuf> {
+fn load_dict() -> Vec<Box<dyn T>> {
     let d = dirs::data_local_dir().unwrap().join("mdict-cli-rs");
 
     let mut v = Vec::new();
@@ -271,16 +271,23 @@ fn load_dict() -> Vec<PathBuf> {
         if entry.file_type().is_dir() {
             continue;
         }
-        if entry.path().extension() == Some(OsStr::new("mdx")) {
-            v.push(PathBuf::from(entry.path()));
+        if let Some(extension) = entry.path().extension().map(OsStr::to_str).flatten() {
+            match extension {
+                "mdx" => {
+                    v.push(Box::new(Mdict {
+                        mdx_path: entry.path().to_path_buf(),
+                    }));
+                }
+                "idx" => {
+                    if let Ok(stardict) = StarDict::idx(entry.path()) {
+                        v.push(Box::new(stardict));
+                    }
+                }
+                _ => {}
+            }
         }
     }
     v
-}
- */
-
-fn load_dict() -> Vec<Box<dyn T>> {
-    todo!()
 }
 
 fn groom_name(folder_name: &str) -> String {
@@ -307,4 +314,18 @@ trait T: Send {
     fn name(&self) -> String;
 
     fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf>;
+}
+
+struct Mdict {
+    mdx_path: PathBuf,
+}
+
+impl T for Mdict {
+    fn name(&self) -> String {
+        todo!()
+    }
+
+    fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf> {
+        todo!()
+    }
 }
