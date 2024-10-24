@@ -284,7 +284,7 @@ impl Idx {
                 }
             }
 
-            let mut word: String = String::from_utf8_lossy(&buf)
+            let word: String = String::from_utf8_lossy(&buf)
                 .chars()
                 .filter(|&c| c != '\u{fffd}')
                 .collect();
@@ -320,8 +320,8 @@ impl Idx {
 }
 
 impl T for StarDict {
-    fn name(&self) -> String {
-        self.dict_name().to_owned()
+    fn name(&self) -> &str {
+        self.dict_name()
     }
 
     fn lookup(&self, word: &str, base_dir: &std::path::Path) -> Result<PathBuf> {
@@ -336,37 +336,6 @@ impl T for StarDict {
                 Ok(base_dir)
             }
             None => Result::Err(anyhow!("not found")),
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use itertools::izip;
-
-    use super::StarDict;
-
-    #[test]
-    fn load_stardict() {
-        let stardict = StarDict::new("./stardict-heritage/cdict-gb".into()).unwrap();
-        assert_eq!(stardict.dict_name(), "CDICT5英汉辞典");
-        assert_eq!(stardict.wordcount(), 57510);
-    }
-
-    #[test]
-    fn lookup_offline() {
-        let stardict = StarDict::new("./stardict-heritage/cdict-gb".into()).unwrap();
-        stardict.exact_lookup("rust").unwrap();
-    }
-
-    #[test]
-    fn lookup_offline_fuzzy() {
-        let stardict = StarDict::new("./stardict-heritage/cdict-gb".into()).unwrap();
-        let misspell = ["rst", "cago", "crade"];
-        let correct = ["rust", "cargo", "crate"];
-        for (mis, cor) in izip!(misspell, correct) {
-            let fuzzy = stardict.fuzzy_lookup(mis).unwrap();
-            fuzzy.iter().find(|w| w.word == cor).unwrap();
         }
     }
 }

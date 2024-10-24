@@ -1,39 +1,21 @@
-use anyhow::anyhow;
-use anyhow::{Context, Result};
-use ego_tree::NodeRef;
-use mdict::{KeyMaker, MDictBuilder};
+use crate::mdict_wrapper::Mdict;
+use anyhow::Result;
 use rayon::prelude::*;
-use scraper::{Html, Node};
 use stardict::StarDict;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::mpsc::channel;
-use std::sync::Arc;
 use std::{
-    collections::HashSet,
     env::{self},
-    fs::{self, File},
+    fs::File,
     io::Write,
     path::PathBuf,
     process::Command,
 };
 use walkdir::WalkDir;
 
+mod mdict_wrapper;
 mod stardict;
-
-struct MyKeyMaker;
-
-impl KeyMaker for MyKeyMaker {
-    fn make(&self, key: &std::borrow::Cow<str>, _resource: bool) -> String {
-        fn strip_punctuation(w: &str) -> String {
-            w.to_lowercase()
-                .chars()
-                .filter(|c| !c.is_ascii_punctuation() && !c.is_whitespace())
-                .collect()
-        }
-        strip_punctuation(key)
-    }
-}
 
 fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
@@ -44,7 +26,6 @@ fn main() -> Result<()> {
     load_dict()
         .into_par_iter()
         .for_each_with(sender, |s, dict| {
-            // fun_name1(p, word, &temp_dir, s);
             if let Ok(p) = dict.lookup(&word, temp_dir.path()) {
                 s.send(format!(
                     r#"<button onclick="changeIframeSrc('{}/index.html', this)">{}</button>"#,
@@ -175,24 +156,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn dfs(root: NodeRef<Node>, hm: &mut HashSet<String>) {
-    if let Node::Element(e) = root.value() {
-        for (_, v) in e.attrs() {
-            if v.ends_with(".css") || v.ends_with(".js") {
-                hm.insert(v.to_owned());
-            }
-        }
-    }
-    for x in root.children() {
-        dfs(x, hm);
-    }
-}
-
 // load mdict or stardict
 fn load_dict() -> Vec<Box<dyn T>> {
     let d = dirs::data_local_dir().unwrap().join("mdict-cli-rs");
 
-    let mut v = Vec::new();
+    let mut v: Vec<Box<dyn T>> = Vec::new();
 
     for entry in WalkDir::new(d).follow_links(true) {
         let Ok(entry) = entry else { continue };
@@ -239,81 +207,7 @@ fn create_sub_dir(base_dir: &Path, prefer_name: String) -> PathBuf {
 
 trait T: Send {
     /// display on button
-    fn name(&self) -> String;
+    fn name(&self) -> &str;
 
     fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf>;
-}
-
-struct Mdict {
-    mdx_path: PathBuf,
-}
-
-impl T for Mdict {
-    fn name(&self) -> String {
-        todo!()
-    }
-
-    fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf> {
-        let mut mdx = MDictBuilder::new(&self.mdx_path).build_with_key_maker(MyKeyMaker)?;
-        let definition = mdx.lookup(&word)?;
-        let Some(definition) = definition else {
-            return Result::Err(anyhow!("not found"));
-        };
-
-        let selected = (&self.mdx_path, definition.definition);
-
-        let base_dir = create_sub_dir(
-            base_dir,
-            groom_name(selected.0.file_name().unwrap().to_str().unwrap()),
-        );
-        fs::create_dir(&base_dir).context(format!("fail to create_dir {:?}", base_dir))?;
-
-        let index_html = base_dir.join("index.html");
-        File::create(&index_html)?.write_all(selected.1.as_bytes())?;
-
-        let mdd_path = selected.0.with_extension("mdd");
-        let mut mdd = MDictBuilder::new(&mdd_path).build_with_key_maker(MyKeyMaker);
-
-        let mut resources: HashSet<String> = HashSet::new();
-        let dom = Html::parse_document(&selected.1);
-        dfs(dom.tree.root(), &mut resources);
-        for resource in resources {
-            let p = {
-                let mut p = selected.0.clone();
-                p.pop();
-                p.push(&resource);
-                p
-            };
-            if p.exists() {
-                let dest = base_dir.join(resource);
-                fs::copy(p, dest)?;
-                continue;
-            }
-
-            let mut resource = resource;
-            if !resource.starts_with('/') {
-                resource = "/".to_owned() + &resource;
-            }
-            let word = &resource.replace('/', "\\");
-            match mdd.as_mut().map(|mdd| mdd.lookup(word)) {
-                Ok(Ok(Some(x))) => {
-                    let dest = base_dir.join(&resource[1..]);
-                    File::create(&dest)
-                        .with_context(|| format!("fail to create {:?}", dest))?
-                        .write_all(x.definition.as_bytes())?;
-                }
-                Ok(Ok(None)) => {
-                    eprintln!("failed to load {resource}");
-                }
-                Ok(Err(e)) => {
-                    eprintln!("failed to load {resource} {e}");
-                }
-                Err(e) => {
-                    eprintln!("{:?} not exist; {e}", mdd_path);
-                }
-            }
-        }
-
-        Ok(base_dir)
-    }
 }
