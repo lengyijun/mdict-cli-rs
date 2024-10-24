@@ -6,6 +6,7 @@ use scraper::{Html, Node};
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::mpsc::channel;
+use std::sync::Arc;
 use std::{
     collections::HashSet,
     env::{self},
@@ -15,6 +16,8 @@ use std::{
     process::Command,
 };
 use walkdir::WalkDir;
+
+mod stardict;
 
 struct MyKeyMaker;
 
@@ -36,20 +39,19 @@ fn main() -> Result<()> {
 
     let (sender, receiver) = channel();
 
-    load_dict().into_par_iter().for_each_with(sender, |s, p| {
-        let Ok(mut mdx) = MDictBuilder::new(&p).build_with_key_maker(MyKeyMaker) else {
-            return;
-        };
-        if let Ok(Some(definition)) = mdx.lookup(&word) {
-            let x = (p, definition.definition);
-            if let Ok(p) = fun_name(temp_dir.path(), &x) {
-                let name = p.file_name().unwrap().to_str().unwrap();
+    load_dict()
+        .into_par_iter()
+        .for_each_with(sender, |s, dict| {
+            // fun_name1(p, word, &temp_dir, s);
+            if let Ok(p) = dict.lookup(&word, temp_dir.path()) {
                 s.send(format!(
-                    r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{name}</button>"#
-                )).unwrap();
+                    r#"<button onclick="changeIframeSrc('{}/index.html', this)">{}</button>"#,
+                    p.file_name().unwrap().to_str().unwrap(),
+                    dict.name(),
+                ))
+                .unwrap();
             }
-        }
-    });
+        });
 
     let buttons: Vec<_> = receiver.iter().collect();
 
@@ -171,6 +173,24 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/*
+fn fun_name1(p: PathBuf, word: String, temp_dir: &tempfile::TempDir, s: _) {
+    let Ok(mut mdx) = MDictBuilder::new(&p).build_with_key_maker(MyKeyMaker) else {
+        return;
+    };
+    if let Ok(Some(definition)) = mdx.lookup(&word) {
+        let x = (p, definition.definition);
+        if let Ok(p) = fun_name(temp_dir.path(), &x) {
+            let name = p.file_name().unwrap().to_str().unwrap();
+            s.send(format!(
+                r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{name}</button>"#
+            ))
+            .unwrap();
+        }
+    }
+}
+ */
+
 fn dfs(root: NodeRef<Node>, hm: &mut HashSet<String>) {
     if let Node::Element(e) = root.value() {
         for (_, v) in e.attrs() {
@@ -239,6 +259,8 @@ fn fun_name(base_dir: &Path, selected: &(PathBuf, String)) -> Result<PathBuf> {
     Ok(base_dir)
 }
 
+/*
+// load mdict or stardict
 fn load_dict() -> Vec<PathBuf> {
     let d = dirs::data_local_dir().unwrap().join("mdict-cli-rs");
 
@@ -254,6 +276,11 @@ fn load_dict() -> Vec<PathBuf> {
         }
     }
     v
+}
+ */
+
+fn load_dict() -> Vec<Box<dyn T>> {
+    todo!()
 }
 
 fn groom_name(folder_name: &str) -> String {
@@ -273,4 +300,11 @@ fn create_sub_dir(base_dir: &Path, prefer_name: String) -> PathBuf {
         }
     }
     unreachable!()
+}
+
+trait T: Send {
+    /// display on button
+    fn name(&self) -> String;
+
+    fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf>;
 }
