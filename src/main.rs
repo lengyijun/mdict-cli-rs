@@ -199,38 +199,46 @@ fn fun_name(base_dir: &Path, selected: &(PathBuf, String)) -> Result<PathBuf> {
     File::create(&index_html)?.write_all(selected.1.as_bytes())?;
 
     let mdd_path = selected.0.with_extension("mdd");
-    if let Ok(mut mdd) = MDictBuilder::new(&mdd_path).build_with_key_maker(MyKeyMaker) {
-        let mut resources: HashSet<String> = HashSet::new();
-        let dom = Html::parse_document(&selected.1);
-        dfs(dom.tree.root(), &mut resources);
-        for resource in resources {
-            let p = {
-                let mut p = selected.0.clone();
-                p.pop();
-                p.push(&resource);
-                p
-            };
-            if p.exists() {
-                let dest = base_dir.join(resource);
-                fs::copy(p, dest)?;
-                continue;
-            }
+    let mut mdd = MDictBuilder::new(&mdd_path).build_with_key_maker(MyKeyMaker);
 
-            let mut resource = resource;
-            if !resource.starts_with('/') {
-                resource = "/".to_owned() + &resource;
-            }
-            if let Ok(Some(x)) = mdd.lookup(&resource.replace('/', "\\")) {
+    let mut resources: HashSet<String> = HashSet::new();
+    let dom = Html::parse_document(&selected.1);
+    dfs(dom.tree.root(), &mut resources);
+    for resource in resources {
+        let p = {
+            let mut p = selected.0.clone();
+            p.pop();
+            p.push(&resource);
+            p
+        };
+        if p.exists() {
+            let dest = base_dir.join(resource);
+            fs::copy(p, dest)?;
+            continue;
+        }
+
+        let mut resource = resource;
+        if !resource.starts_with('/') {
+            resource = "/".to_owned() + &resource;
+        }
+        let word = &resource.replace('/', "\\");
+        match mdd.as_mut().map(|mdd| mdd.lookup(word)) {
+            Ok(Ok(Some(x))) => {
                 let dest = base_dir.join(&resource[1..]);
                 File::create(&dest)
                     .with_context(|| format!("fail to create {:?}", dest))?
                     .write_all(x.definition.as_bytes())?;
-            } else {
+            }
+            Ok(Ok(None)) => {
                 eprintln!("failed to load {resource}");
             }
+            Ok(Err(e)) => {
+                eprintln!("failed to load {resource} {e}");
+            }
+            Err(e) => {
+                eprintln!("{:?} not exist; {e}", mdd_path);
+            }
         }
-    } else {
-        eprintln!("{:?} not exists", mdd_path);
     }
     Ok(base_dir)
 }
