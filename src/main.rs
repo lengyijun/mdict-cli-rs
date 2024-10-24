@@ -14,6 +14,7 @@ use std::{
 };
 use walkdir::WalkDir;
 
+mod spaced_repetition;
 mod mdict_wrapper;
 mod stardict;
 mod utils;
