@@ -51,21 +51,18 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    let mut buttons: Vec<_> = Vec::new();
+
     for x in &results {
-        fun_name(temp_dir.path(), x)?;
+        if let Ok(p) = fun_name(temp_dir.path(), x) {
+            let name = p.file_name().unwrap().to_str().unwrap();
+            buttons.push(format!(
+                r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{name}</button>"#
+            ));
+        }
     }
 
-    let buttons: String = results
-        .into_iter()
-        .map(|(p, _)| {
-            let display_name = p.file_name().unwrap().to_str().unwrap();
-            let name = groom_name(display_name);
-            format!(
-                r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{display_name}</button>"#
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    let buttons_str = buttons.join("\n");
 
     let index_html = temp_dir.path().join("index.html");
     let html = format!(
@@ -138,7 +135,7 @@ fn main() -> Result<()> {
 
   <!-- 左边的可滚动按钮列 -->
   <div class="sidebar">
-   {buttons}
+   {buttons_str}
   </div>
 
   <!-- 右边显示 iframe -->
@@ -191,13 +188,14 @@ fn dfs(root: NodeRef<Node>, hm: &mut HashSet<String>) {
     }
 }
 
-fn fun_name(base_path: &Path, selected: &(PathBuf, String)) -> Result<()> {
-    let base_path = base_path.join(groom_name(
-        selected.0.file_name().unwrap().to_str().unwrap(),
-    ));
-    fs::create_dir(&base_path).context(format!("fail to create_dir {:?}", base_path))?;
+fn fun_name(base_dir: &Path, selected: &(PathBuf, String)) -> Result<PathBuf> {
+    let base_dir = create_sub_dir(
+        base_dir,
+        groom_name(selected.0.file_name().unwrap().to_str().unwrap()),
+    );
+    fs::create_dir(&base_dir).context(format!("fail to create_dir {:?}", base_dir))?;
 
-    let index_html = base_path.join("index.html");
+    let index_html = base_dir.join("index.html");
     File::create(&index_html)?.write_all(selected.1.as_bytes())?;
 
     let mdd_path = selected.0.with_extension("mdd");
@@ -213,7 +211,7 @@ fn fun_name(base_path: &Path, selected: &(PathBuf, String)) -> Result<()> {
                 p
             };
             if p.exists() {
-                let dest = base_path.join(resource);
+                let dest = base_dir.join(resource);
                 fs::copy(p, dest)?;
                 continue;
             }
@@ -223,7 +221,7 @@ fn fun_name(base_path: &Path, selected: &(PathBuf, String)) -> Result<()> {
                 resource = "/".to_owned() + &resource;
             }
             if let Ok(Some(x)) = mdd.lookup(&resource.replace('/', "\\")) {
-                let dest = base_path.join(&resource[1..]);
+                let dest = base_dir.join(&resource[1..]);
                 File::create(&dest)
                     .with_context(|| format!("fail to create {:?}", dest))?
                     .write_all(x.definition.as_bytes())?;
@@ -234,7 +232,7 @@ fn fun_name(base_path: &Path, selected: &(PathBuf, String)) -> Result<()> {
     } else {
         eprintln!("{:?} not exists", mdd_path);
     }
-    Ok(())
+    Ok(base_dir)
 }
 
 fn load_dict() -> Vec<PathBuf> {
@@ -254,4 +252,18 @@ fn load_dict() -> Vec<PathBuf> {
 fn groom_name(folder_name: &str) -> String {
     // remove ' in folder_name
     folder_name.replace(|c| c == '\'', "")
+}
+
+fn create_sub_dir(base_dir: &Path, prefer_name: String) -> PathBuf {
+    let p = base_dir.join(&prefer_name);
+    if !p.exists() {
+        return p;
+    }
+    for i in 1.. {
+        let p = base_dir.join(format!("{prefer_name}-{i}"));
+        if !p.exists() {
+            return base_dir.join(prefer_name);
+        }
+    }
+    unreachable!()
 }
