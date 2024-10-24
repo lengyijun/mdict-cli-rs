@@ -40,26 +40,21 @@ fn main() -> Result<()> {
             return;
         };
         if let Ok(Some(definition)) = mdx.lookup(&word) {
-            s.send((p, definition.definition)).unwrap();
+            let x = (p, definition.definition);
+            if let Ok(p) = fun_name(temp_dir.path(), &x) {
+                let name = p.file_name().unwrap().to_str().unwrap();
+                s.send(format!(
+                    r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{name}</button>"#
+                )).unwrap();
+            }
         }
     });
 
-    let results: Vec<_> = receiver.iter().collect();
+    let buttons: Vec<_> = receiver.iter().collect();
 
-    if results.is_empty() {
+    if buttons.is_empty() {
         eprintln!("not found");
         return Ok(());
-    }
-
-    let mut buttons: Vec<_> = Vec::new();
-
-    for x in &results {
-        if let Ok(p) = fun_name(temp_dir.path(), x) {
-            let name = p.file_name().unwrap().to_str().unwrap();
-            buttons.push(format!(
-                r#"<button onclick="changeIframeSrc('{name}/index.html', this)">{name}</button>"#
-            ));
-        }
     }
 
     let buttons_str = buttons.join("\n");
