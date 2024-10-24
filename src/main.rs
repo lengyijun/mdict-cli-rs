@@ -1,5 +1,6 @@
 use crate::mdict_wrapper::Mdict;
 use anyhow::Result;
+use fsrs::sqlite_history::add_history;
 use rayon::prelude::*;
 use stardict::StarDict;
 use std::ffi::OsStr;
@@ -14,8 +15,9 @@ use std::{
 };
 use walkdir::WalkDir;
 
-mod spaced_repetition;
+mod fsrs;
 mod mdict_wrapper;
+mod spaced_repetition;
 mod stardict;
 mod utils;
 
@@ -44,6 +46,8 @@ fn main() -> Result<()> {
         eprintln!("not found");
         return Ok(());
     }
+
+    add_history(&word);
 
     let buttons_str = buttons.join("\n");
 
