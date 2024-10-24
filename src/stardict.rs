@@ -9,7 +9,6 @@ use flate2::read::GzDecoder;
 use std::borrow::Cow;
 use std::cell::OnceCell;
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fmt::{self, Debug, Display};
 use std::fs::{self, read, File};
 use std::io::{prelude::*, BufReader};
@@ -67,11 +66,6 @@ impl StarDict {
 
         Ok(StarDict { ifo, idx, dict })
     }
-
-    /// Get the number of the words in the stardict.
-    pub fn wordcount(&self) -> usize {
-        self.ifo.wordcount
-    }
 }
 
 impl StarDict {
@@ -83,8 +77,7 @@ impl StarDict {
             .binary_search_by(|probe| probe.0.to_lowercase().cmp(&word))
         {
             let (word, offset, size) = &self.idx.items[pos];
-            let trans = self.dict.get(*offset, *size);
-            Some(trans)
+            self.dict.get(*offset, *size).ok()
         } else {
             None
         }
@@ -120,9 +113,11 @@ impl StarDict {
         }
 
         res.into_iter()
-            .map(|(word, offset, size)| Entry {
-                word: word.to_string(),
-                trans: std::borrow::Cow::Borrowed(self.dict.get(*offset, *size)),
+            .flat_map(|(word, offset, size)| {
+                Ok::<Entry<'_>, anyhow::Error>(Entry {
+                    word: word.to_string(),
+                    trans: std::borrow::Cow::Borrowed(self.dict.get(*offset, *size)?),
+                })
             })
             .collect()
     }
@@ -286,16 +281,16 @@ impl DictType {
         Ok(contents)
     }
 
-    fn load(&self) -> String {
+    fn load(&self) -> Result<String> {
         match self {
-            DictType::Dz(pathbuf) => Self::load_dz(pathbuf).unwrap(),
-            DictType::Dict(pathbuf) => fs::read_to_string(pathbuf).unwrap(),
+            DictType::Dz(path) => Self::load_dz(path),
+            DictType::Dict(path) => Ok(fs::read_to_string(path)?),
         }
     }
 }
 
 pub struct Dict {
-    contents: OnceCell<String>,
+    contents: OnceCell<Result<String>>,
     dict_type: DictType,
 }
 
@@ -307,11 +302,18 @@ impl Dict {
         }
     }
 
-    fn get(&self, offset: usize, size: usize) -> &str {
-        self.contents
+    fn get(&self, offset: usize, size: usize) -> Result<&str> {
+        let res = self
+            .contents
             .get_or_init(|| self.dict_type.load())
-            .get(offset..offset + size)
-            .unwrap_or_default()
+            .as_ref()
+            .map(|x| x.get(offset..offset + size));
+
+        match res {
+            Ok(Some(res)) => Ok(res),
+            Ok(None) => Err(NotFoundError.into()),
+            Err(_error) => Err(NotFoundError.into()), // TODO: lost _error here
+        }
     }
 }
 
@@ -324,7 +326,7 @@ impl Idx {
     fn read_bytes<const N: usize, T>(path: PathBuf) -> Result<Self>
     where
         T: FromBytes<N> + TryInto<usize>,
-        <T as TryInto<usize>>::Error: Debug,
+        <T as TryInto<usize>>::Error: Debug + Error + Send + Sync + 'static,
     {
         let f = File::open(&path).with_context(|| format!("Failed to open idx file {:?}", path))?;
         let mut f = BufReader::new(f);
@@ -355,11 +357,11 @@ impl Idx {
 
             f.read(&mut b)
                 .with_context(|| format!("Failed to parse idx file {:?}", path))?;
-            let offset = T::from_be_bytes(b).try_into().unwrap();
+            let offset = T::from_be_bytes(b).try_into()?;
 
             f.read(&mut b)
                 .with_context(|| format!("Failed to parse idx file {:?}", path))?;
-            let size = T::from_be_bytes(b).try_into().unwrap();
+            let size = T::from_be_bytes(b).try_into()?;
 
             if !word.is_empty() {
                 items.push((word, offset, size))
