@@ -174,8 +174,13 @@ fn load_dict() -> Vec<Box<dyn T>> {
                         mdx_path: entry.path().to_path_buf(),
                     }));
                 }
-                "idx" => {
-                    if let Ok(stardict) = StarDict::idx(entry.path()) {
+                "dz" => {
+                    if let Ok(stardict) = StarDict::dz(entry.path()) {
+                        v.push(Box::new(stardict));
+                    }
+                }
+                "dict" => {
+                    if let Ok(stardict) = StarDict::dict(entry.path()) {
                         v.push(Box::new(stardict));
                     }
                 }
@@ -209,5 +214,6 @@ trait T: Send {
     /// display on button
     fn name(&self) -> &str;
 
+    /// write the result in @return/index.html
     fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf>;
 }
