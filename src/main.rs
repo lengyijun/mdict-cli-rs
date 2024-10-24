@@ -3,6 +3,7 @@ use ego_tree::NodeRef;
 use mdict::{KeyMaker, MDictBuilder};
 use rayon::prelude::*;
 use scraper::{Html, Node};
+use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::{
@@ -245,7 +246,10 @@ fn load_dict() -> Vec<PathBuf> {
 
     for entry in WalkDir::new(d).follow_links(true) {
         let Ok(entry) = entry else { continue };
-        if !entry.file_type().is_dir() && entry.file_name().to_str().unwrap().ends_with(".mdx") {
+        if entry.file_type().is_dir() {
+            continue;
+        }
+        if entry.path().extension() == Some(OsStr::new("mdx")) {
             v.push(PathBuf::from(entry.path()));
         }
     }
