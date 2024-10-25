@@ -1,4 +1,5 @@
 use crate::mdict_wrapper::Mdict;
+use anyhow::anyhow;
 use anyhow::Result;
 use fsrs::sqlite_history::add_history;
 use rayon::prelude::*;
@@ -23,14 +24,23 @@ mod utils;
 
 fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
-    let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
+    if word == "anki" {
+      todo!()
+    } else {
+        let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
+        let index_html = query(word, temp_dir.path())?;
+        let _ = Command::new("carbonyl").arg(index_html).status()?;
+        Ok(())
+    }
+}
 
+fn query(word: String, base_dir: &Path) -> Result<PathBuf> {
     let (sender, receiver) = channel();
 
     load_dict()
         .into_par_iter()
         .for_each_with(sender, |s, dict| {
-            if let Ok(p) = dict.lookup(&word, temp_dir.path()) {
+            if let Ok(p) = dict.lookup(&word, base_dir) {
                 s.send(format!(
                     r#"<button onclick="changeIframeSrc('{}/index.html', this)">{}</button>"#,
                     p.file_name().unwrap().to_str().unwrap(),
@@ -43,15 +53,15 @@ fn main() -> Result<()> {
     let buttons: Vec<_> = receiver.iter().collect();
 
     if buttons.is_empty() {
-        eprintln!("not found");
-        return Ok(());
+        eprintln!("{word} not found");
+        return Err(anyhow!("not found"));
     }
 
     add_history(&word);
 
     let buttons_str = buttons.join("\n");
 
-    let index_html = temp_dir.path().join("index.html");
+    let index_html = base_dir.join("index.html");
     let html = format!(
         r#"
 <!DOCTYPE html>
@@ -158,8 +168,7 @@ fn main() -> Result<()> {
     );
     File::create(&index_html)?.write_all(html.as_bytes())?;
 
-    let _ = Command::new("carbonyl").arg(index_html).status()?;
-    Ok(())
+    Ok(index_html)
 }
 
 // load mdict or stardict
