@@ -10,6 +10,7 @@ use axum::{
     Router,
 };
 use axum_extra::TypedHeader;
+use futures::executor::block_on;
 use futures::stream::{self, Stream};
 use std::fs::File;
 use std::io::Write;
@@ -157,24 +158,7 @@ pub fn anki() -> Result<()> {
 
     File::create(temp_dir_path.join("index.html"))?.write_all(html.as_bytes())?;
 
-    let server_thread = thread::spawn(async || {
-        let static_files_service =
-            ServeDir::new(temp_dir_path).append_index_html_on_directories(true);
-        let app = Router::new()
-            .fallback_service(static_files_service)
-            .route("/again", get(sse_handler))
-            .route("/hard", get(sse_handler))
-            .route("/good", get(sse_handler))
-            .route("/easy", get(sse_handler))
-            .layer(TraceLayer::new_for_http());
-
-        // run it
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
-            .await
-            .unwrap();
-        tracing::debug!("listening on {}", listener.local_addr().unwrap());
-        axum::serve(listener, app).await.unwrap();
-    });
+    let server_thread = thread::spawn(|| block_on(foo(temp_dir_path)));
 
     let _ = server_thread.join().unwrap();
     let _ = Command::new("carbonyl")
@@ -182,6 +166,26 @@ pub fn anki() -> Result<()> {
         .status()?;
     loop {}
     Ok(())
+}
+
+async fn foo(p: PathBuf) {
+    let app = app(p);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
+        .await
+        .unwrap();
+    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    axum::serve(listener, app).await.unwrap();
+}
+
+fn app(p: PathBuf) -> Router {
+    let static_files_service = ServeDir::new(p).append_index_html_on_directories(true);
+    Router::new()
+        .fallback_service(static_files_service)
+        .route("/again", get(sse_handler))
+        .route("/hard", get(sse_handler))
+        .route("/good", get(sse_handler))
+        .route("/easy", get(sse_handler))
+        .layer(TraceLayer::new_for_http())
 }
 
 async fn sse_handler(
