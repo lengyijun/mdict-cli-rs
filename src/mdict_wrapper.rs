@@ -87,10 +87,10 @@ impl T for Mdict {
                         .write_all(x.definition.as_bytes())?;
                 }
                 Ok(Ok(None)) => {
-                    eprintln!("failed to load {resource}");
+                    eprintln!("{} failed to load {resource}", self.name());
                 }
                 Ok(Err(e)) => {
-                    eprintln!("failed to load {resource} {e}");
+                    eprintln!("{} failed to load {resource} {e}", self.name());
                 }
                 Err(e) => {
                     eprintln!("{:?} not exist; {e}", mdd_path);
