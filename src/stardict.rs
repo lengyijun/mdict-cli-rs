@@ -404,9 +404,7 @@ impl T for StarDict {
     fn lookup(&self, word: &str, base_dir: &std::path::Path) -> Result<PathBuf> {
         match self.exact_lookup(word) {
             Some(entry) => {
-                let base_dir = create_sub_dir(base_dir, groom_name(self.dict_name()));
-                std::fs::create_dir(&base_dir)
-                    .context(format!("fail to create_dir {:?}", base_dir))?;
+                let base_dir = create_sub_dir(base_dir, &groom_name(self.dict_name()))?;
 
                 let index_html = base_dir.join("index.html");
                 File::create(&index_html)?.write_all(entry.as_bytes())?;

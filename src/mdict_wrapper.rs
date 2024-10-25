@@ -48,9 +48,8 @@ impl T for Mdict {
 
         let base_dir = create_sub_dir(
             base_dir,
-            groom_name(selected.0.file_name().unwrap().to_str().unwrap()),
-        );
-        fs::create_dir(&base_dir).context(format!("fail to create_dir {:?}", base_dir))?;
+            &groom_name(selected.0.file_name().unwrap().to_str().unwrap()),
+        )?;
 
         let index_html = base_dir.join("index.html");
         File::create(&index_html)?.write_all(selected.1.as_bytes())?;

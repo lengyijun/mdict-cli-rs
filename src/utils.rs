@@ -1,3 +1,5 @@
+use anyhow::Context;
+use anyhow::Result;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -16,8 +18,14 @@ pub fn groom_name(folder_name: &str) -> String {
     folder_name.replace(|c| c == '\'', "")
 }
 
-pub fn create_sub_dir(base_dir: &Path, prefer_name: String) -> PathBuf {
-    let p = base_dir.join(&prefer_name);
+pub fn create_sub_dir(base_dir: &Path, prefer_name: &str) -> Result<PathBuf> {
+    let p = create_sub_dir_inner(base_dir, prefer_name);
+    std::fs::create_dir(&p).context(format!("fail to create_dir {:?}", base_dir))?;
+    Ok(p)
+}
+
+fn create_sub_dir_inner(base_dir: &Path, prefer_name: &str) -> PathBuf {
+    let p = base_dir.join(prefer_name);
     if !p.exists() {
         return p;
     }

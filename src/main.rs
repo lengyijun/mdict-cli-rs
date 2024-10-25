@@ -1,3 +1,5 @@
+#![feature(async_closure)]
+
 use crate::mdict_wrapper::Mdict;
 use anyhow::anyhow;
 use anyhow::Result;
@@ -16,6 +18,7 @@ use std::{
 };
 use walkdir::WalkDir;
 
+mod anki;
 mod fsrs;
 mod mdict_wrapper;
 mod spaced_repetition;
@@ -25,22 +28,24 @@ mod utils;
 fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
     if word == "anki" {
-      todo!()
+        anki::anki()?;
+        Ok(())
     } else {
         let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
-        let index_html = query(word, temp_dir.path())?;
+        let index_html = query(&word, temp_dir.path())?;
+        add_history(&word);
         let _ = Command::new("carbonyl").arg(index_html).status()?;
         Ok(())
     }
 }
 
-fn query(word: String, base_dir: &Path) -> Result<PathBuf> {
+fn query(word: &str, base_dir: &Path) -> Result<PathBuf> {
     let (sender, receiver) = channel();
 
     load_dict()
         .into_par_iter()
         .for_each_with(sender, |s, dict| {
-            if let Ok(p) = dict.lookup(&word, base_dir) {
+            if let Ok(p) = dict.lookup(word, base_dir) {
                 s.send(format!(
                     r#"<button onclick="changeIframeSrc('{}/index.html', this)">{}</button>"#,
                     p.file_name().unwrap().to_str().unwrap(),
@@ -56,8 +61,6 @@ fn query(word: String, base_dir: &Path) -> Result<PathBuf> {
         eprintln!("{word} not found");
         return Err(anyhow!("not found"));
     }
-
-    add_history(&word);
 
     let buttons_str = buttons.join("\n");
 
