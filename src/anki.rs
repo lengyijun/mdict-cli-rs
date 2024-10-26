@@ -2,10 +2,9 @@ use crate::fsrs::sqlite_history::SQLiteHistory;
 use crate::utils::create_sub_dir;
 use crate::{query, spaced_repetition::SpacedRepetiton};
 use anyhow::Result;
-use axum::extract::Path;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
-use axum::routing::get;
+use axum::routing::post;
 use axum::Json;
 use axum::Router;
 use axum_extra::TypedHeader;
@@ -16,7 +15,6 @@ use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 use std::thread;
-use std::{convert::Infallible, time::Duration};
 use tokio_stream::StreamExt as _;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -42,7 +40,7 @@ pub async fn anki() -> Result<()> {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>固定顶部和底部</title>
+    <title>Review</title>
     <style>
         body {{
             margin: 0;
@@ -149,7 +147,16 @@ pub async fn anki() -> Result<()> {
         }}
 
         function rate(rating) {{
-            fetch("/again/"+word+"/"+rating)
+            fetch("/ppppp", {{
+                method: 'POST',
+                headers: {{
+                    'Content-Type': 'application/json'
+                }},
+               body: JSON.stringify({{
+                    word : word,
+                    rating : rating
+               }}) 
+            }})
             .then(response => response.json())
             .then(data => {{
                 if(data.finished) {{
@@ -157,9 +164,9 @@ pub async fn anki() -> Result<()> {
                     alert("Congratulation! All cards reviewed")
                 }}else{{
                     document.getElementById("header").textContent = data.word;
+                    document.getElementById('answer').src = "about:blank";
                     word = data.word;
                     path = data.p;
-                    console.log('Success:', data);
 
                     document.getElementById('easy').style.display = 'none';
                     document.getElementById('good').style.display = 'none';
@@ -171,7 +178,6 @@ pub async fn anki() -> Result<()> {
             .catch((error) => {{
                 console.error('Error:', error);
             }});
-            alert("You rated the card as: " + q);
         }}
     </script>
 
@@ -183,28 +189,31 @@ pub async fn anki() -> Result<()> {
     File::create(temp_dir_path.join("index.html"))?.write_all(html.as_bytes())?;
 
     let server_thread = thread::spawn(|| {
-        let _ = Command::new("carbonyl")
-            .arg("http://127.0.0.1:3333")
-            .status()
-            .unwrap();
+        // let _ = Command::new("carbonyl")
+        //     .arg("http://127.0.0.1:3333")
+        //     .status()
+        //     .unwrap();
     });
 
     // async fn handler(Path(params): Path<Params>) -> impl IntoResponse {
     let handler = async move |State(spaced_repetition): State<SQLiteHistory>,
-                              Path(params): Path<Params>|
+                              Json(params): Json<Params>|
                 -> Json<Value> {
         spaced_repetition
-            .update(params.word, params.q)
+            .update(&params.word, params.rating)
             .await
             .unwrap();
         match spaced_repetition.next_to_review().await {
-            Ok(Some(word)) => match query(&word, &temp_dir_path) {
-                Ok(p) => {
-                    let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
-                    Json(json!({ "word": word, "p" : filename }))
+            Ok(Some(word)) => {
+                let p = create_sub_dir(&temp_dir_path, &word).unwrap();
+                match query(&word, &p) {
+                    Ok(_) => {
+                        let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
+                        Json(json!({ "word": word, "p" : filename }))
+                    }
+                    Err(_) => Json(json!({ "finished": true })),
                 }
-                Err(_) => Json(json!({ "finished": true })),
-            },
+            }
             _ => Json(json!({ "finished": true })),
         }
     };
@@ -213,11 +222,8 @@ pub async fn anki() -> Result<()> {
         ServeDir::new(temp_dir.path()).append_index_html_on_directories(true);
     let app = Router::new()
         .fallback_service(static_files_service)
-        .route("/again/{word}/{q}", get(handler))
+        .route("/ppppp", post(handler))
         .with_state(spaced_repetition)
-        // .route("/hard", get(sse_handler))
-        // .route("/good", get(sse_handler))
-        // .route("/easy", get(sse_handler))
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
         .await
@@ -232,25 +238,5 @@ pub async fn anki() -> Result<()> {
 #[derive(Debug, Deserialize, Serialize)]
 struct Params {
     word: String,
-    q: u8,
-}
-
-async fn sse_handler(
-    TypedHeader(user_agent): TypedHeader<headers::UserAgent>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    println!("`{}` connected", user_agent.as_str());
-
-    // A `Stream` that repeats an event every second
-    //
-    // You can also create streams from tokio channels using the wrappers in
-    // https://docs.rs/tokio-stream
-    let stream = stream::repeat_with(|| Event::default().data("hi!"))
-        .map(Ok)
-        .throttle(Duration::from_secs(1));
-
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(1))
-            .text("keep-alive-text"),
-    )
+    rating: u8,
 }

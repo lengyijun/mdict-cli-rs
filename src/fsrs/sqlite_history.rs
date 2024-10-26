@@ -242,7 +242,7 @@ COMMIT;
         }
         // Do not create a session until the first entry is added.
         self.create_session().await?;
-        self.add_entry(line, Default::default()).await
+        self.add_entry(line, Card::new()).await
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::spaced_repetition::SpacedRepetiton;
+use anyhow::Context;
 use anyhow::Result;
 use chrono::DateTime;
 use chrono::Duration;
@@ -27,7 +28,7 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
     }
 
     /// requires 1 <= rating <= 4
-    async fn update(&self, question: String, rating: u8) -> Result<()> {
+    async fn update(&self, question: &str, rating: u8) -> Result<()> {
         let rating = match rating {
             1 => fsrs::Rating::Again,
             2 => fsrs::Rating::Hard,
@@ -35,9 +36,13 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
             4 => fsrs::Rating::Easy,
             _ => unreachable!(),
         };
-        let old_card = get_word(&self.conn, &question).await?;
+        let old_card = get_word(&self.conn, question)
+            .await
+            .context("get old card fail")?;
         let scheduling_info = self.fsrs.next(old_card, Utc::now(), rating);
-        update(&self.conn, &question, scheduling_info.card).await?;
+        update(&self.conn, question, scheduling_info.card)
+            .await
+            .context("update fail")?;
         Ok(())
     }
 
@@ -50,13 +55,12 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
     }
 }
 
-// TODO: never used ?
 async fn update(pool: &SqlitePool, word: &str, card: Card) -> Result<()> {
     let card_str: String = serde_json::to_string(&card)?;
     sqlx::query("UPDATE fsrs SET card = $2 WHERE word = $1")
         .bind(word)
         .bind(card_str)
-        .fetch_one(pool)
+        .execute(pool)
         .await?;
     Ok(())
 }

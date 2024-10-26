@@ -20,7 +20,7 @@ pub fn groom_name(folder_name: &str) -> String {
 
 pub fn create_sub_dir(base_dir: &Path, prefer_name: &str) -> Result<PathBuf> {
     let p = create_sub_dir_inner(base_dir, prefer_name);
-    std::fs::create_dir(&p).context(format!("fail to create_dir {:?}", base_dir))?;
+    std::fs::create_dir(&p).context(format!("fail to create_dir {:?}", p))?;
     Ok(p)
 }
 
