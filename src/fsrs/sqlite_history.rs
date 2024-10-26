@@ -10,6 +10,8 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::fs::create_dir;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::usize;
 
 pub fn get_db_path() -> Result<PathBuf> {
@@ -37,6 +39,7 @@ pub fn add_history(word: &str) -> Result<()> {
 }
 
 /// History stored in an SQLite database.
+#[derive(Clone)]
 pub struct SQLiteHistory {
     max_len: usize,
     ignore_space: bool,
@@ -44,8 +47,8 @@ pub struct SQLiteHistory {
     path: Option<PathBuf>, // None => memory
     pub conn: Connection,  /* we need to keep a connection opened at least for in memory
                             * database and also for cached statement(s) */
-    session_id: usize,   // 0 means no new entry added
-    row_id: Cell<usize>, // max entry id
+    session_id: usize,         // 0 means no new entry added
+    row_id: Arc<Mutex<usize>>, // max entry id
     pub fsrs: FSRS,
 }
 
@@ -77,7 +80,7 @@ impl SQLiteHistory {
             path,
             conn,
             session_id: 0,
-            row_id: Cell::new(0),
+            row_id: Arc::new(Mutex::new(0)),
             fsrs: FSRS::new(Some(&DEFAULT_PARAMETERS)).unwrap(),
         };
         sh.check_schema()?;
@@ -94,16 +97,15 @@ impl SQLiteHistory {
     fn reset(&mut self, path: &Path) -> Result<Connection> {
         self.path = normalize(path);
         self.session_id = 0;
-        self.row_id.set(0);
+        *self.row_id.lock().unwrap() = 0;
         Ok(std::mem::replace(&mut self.conn, conn(self.path.as_ref())?))
     }
 
     fn update_row_id(&mut self) -> Result<()> {
-        self.row_id.set(self.conn.query_row(
-            "SELECT ifnull(max(rowid), 0) FROM fsrs;",
-            [],
-            |r| r.get(0),
-        )?);
+        let x = self
+            .conn
+            .query_row("SELECT ifnull(max(rowid), 0) FROM fsrs;", [], |r| r.get(0))?;
+        *self.row_id.lock().unwrap() = x;
         Ok(())
     }
 
@@ -153,7 +155,7 @@ COMMIT;
         if self.ignore_dups || user_version > 0 {
             self.set_ignore_dups()?;
         }
-        if self.row_id.get() == 0 && user_version > 0 {
+        if *self.row_id.lock().unwrap() == 0 && user_version > 0 {
             self.update_row_id()?;
         }
         Ok(())
@@ -216,7 +218,7 @@ COMMIT;
             )
             .optional()?
         {
-            self.row_id.set(row_id);
+            *self.row_id.lock().unwrap() = row_id;
             Ok(true)
         } else {
             Ok(false)
