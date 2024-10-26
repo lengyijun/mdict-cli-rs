@@ -4,6 +4,8 @@ use crate::{
     spaced_repetition::{self, SpacedRepetiton},
 };
 use anyhow::Result;
+use axum::extract::Path;
+use axum::Json;
 use axum::{
     response::sse::{Event, Sse},
     routing::get,
@@ -13,6 +15,7 @@ use axum_extra::TypedHeader;
 use futures::executor::block_on;
 use futures::stream::{self, Stream};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
@@ -167,13 +170,28 @@ pub async fn anki() -> Result<()> {
             .unwrap();
     });
 
-    let static_files_service = ServeDir::new(temp_dir_path).append_index_html_on_directories(true);
+    // async fn handler(Path(params): Path<Params>) -> impl IntoResponse {
+    let handler = async move |Path(params): Path<Params>| -> Json<Value> {
+        spaced_repetition.update(params.word, params.q);
+        match spaced_repetition.next_to_review() {
+            Ok(Some(word)) => match query(&word, &temp_dir_path) {
+                Ok(p) => {
+                    let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
+                    Json(json!({ "word": word, "p" : filename }))
+                }
+                Err(_) => Json(json!({ "finished": true })),
+            },
+            _ => Json(json!({ "finished": true })),
+        }
+    };
+
+    let static_files_service = ServeDir::new(&temp_dir_path).append_index_html_on_directories(true);
     let app = Router::new()
         .fallback_service(static_files_service)
-        .route("/again", get(sse_handler))
-        .route("/hard", get(sse_handler))
-        .route("/good", get(sse_handler))
-        .route("/easy", get(sse_handler))
+        .route("/again/{word}/{q}", get(handler))
+        // .route("/hard", get(sse_handler))
+        // .route("/good", get(sse_handler))
+        // .route("/easy", get(sse_handler))
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
         .await

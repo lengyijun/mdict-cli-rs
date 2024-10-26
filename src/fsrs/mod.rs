@@ -73,7 +73,7 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
     }
 
     /// requires 1 <= q <= 4
-    fn update(&mut self, question: String, q: u8) -> Result<()> {
+    fn update(&self, question: String, q: u8) -> Result<()> {
         let old_state = get_word(&self.conn, &question)?;
         let next_states = self.fsrs.next_states(
             Some(old_state.to_memory_state()),
