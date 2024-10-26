@@ -68,10 +68,6 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
         Ok(None)
     }
 
-    fn add_fresh_word(&mut self, _word: String) -> Result<()> {
-        unreachable!()
-    }
-
     /// requires 1 <= q <= 4
     fn update(&self, question: String, q: u8) -> Result<()> {
         let old_state = get_word(&self.conn, &question)?;
