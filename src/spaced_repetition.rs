@@ -1,10 +1,10 @@
 use anyhow::Result;
 
-pub trait SpacedRepetiton: Sized + Default {
+pub trait SpacedRepetiton: Sized {
     /// find next reviewable word
-    fn next_to_review(&self) -> Result<Option<String>>;
+    async fn next_to_review(&self) -> Result<Option<String>>;
 
-    fn update(&self, question: String, q: u8) -> Result<()>;
+    async fn update(&self, question: String, rating: u8) -> Result<()>;
 
-    fn remove(&mut self, question: &str) -> Result<()>;
+    async fn remove(&mut self, question: &str) -> Result<()>;
 }

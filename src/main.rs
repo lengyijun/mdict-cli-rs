@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
     } else {
         let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
         let index_html = query(&word, temp_dir.path())?;
-        add_history(&word);
+        add_history(&word).await?;
         let _ = Command::new("carbonyl").arg(index_html).status()?;
         Ok(())
     }

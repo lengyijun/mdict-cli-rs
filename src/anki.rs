@@ -1,38 +1,32 @@
 use crate::fsrs::sqlite_history::SQLiteHistory;
 use crate::utils::create_sub_dir;
-use crate::{
-    query,
-    spaced_repetition::{self, SpacedRepetiton},
-};
+use crate::{query, spaced_repetition::SpacedRepetiton};
 use anyhow::Result;
 use axum::extract::Path;
 use axum::extract::State;
+use axum::response::sse::{Event, Sse};
+use axum::routing::get;
 use axum::Json;
-use axum::{
-    response::sse::{Event, Sse},
-    routing::get,
-    Router,
-};
+use axum::Router;
 use axum_extra::TypedHeader;
-use futures::executor::block_on;
 use futures::stream::{self, Stream};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 use std::thread;
-use std::{convert::Infallible, path::PathBuf, time::Duration};
+use std::{convert::Infallible, time::Duration};
 use tokio_stream::StreamExt as _;
-use tower_http::{services::ServeDir, trace::TraceLayer};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 
 pub async fn anki() -> Result<()> {
     let temp_dir = tempfile::Builder::new().prefix("review-").tempdir()?;
     let temp_dir_path = temp_dir.path().to_path_buf();
 
-    let spaced_repetition = SQLiteHistory::default();
-    let Ok(Some(word)) = spaced_repetition.next_to_review() else {
+    let spaced_repetition = SQLiteHistory::default().await;
+    let Ok(Some(word)) = spaced_repetition.next_to_review().await else {
         println!("no word to review");
         return Ok(());
     };
@@ -55,7 +49,7 @@ pub async fn anki() -> Result<()> {
             padding: 0;
             font-family: Arial, sans-serif;
         }}
-        .header {{
+        #header {{
             position: fixed;
             top: 0;
             left: 0;
@@ -125,7 +119,7 @@ pub async fn anki() -> Result<()> {
 </head>
 <body>
 
-    <div class="header">
+    <div id="header">
         {word}
     </div>
 
@@ -142,10 +136,11 @@ pub async fn anki() -> Result<()> {
     </div>
 
     <script>
-        var word = {word};
+        var word = "{word}";
+        var path = "{}";
 
         function showAnswer() {{
-            document.getElementById('answer').src= "{}/index.html";
+            document.getElementById('answer').src= path + "/index.html";
             document.getElementById('easy').style.display = '';
             document.getElementById('good').style.display = '';
             document.getElementById('hard').style.display = '';
@@ -153,7 +148,29 @@ pub async fn anki() -> Result<()> {
             document.getElementById('showanswer').style.display = 'none';
         }}
 
-        function rate(q) {{
+        function rate(rating) {{
+            fetch("/again/"+word+"/"+rating)
+            .then(response => response.json())
+            .then(data => {{
+                if(data.finished) {{
+                    console.log("Congratulation! All cards reviewed");
+                    alert("Congratulation! All cards reviewed")
+                }}else{{
+                    document.getElementById("header").textContent = data.word;
+                    word = data.word;
+                    path = data.p;
+                    console.log('Success:', data);
+
+                    document.getElementById('easy').style.display = 'none';
+                    document.getElementById('good').style.display = 'none';
+                    document.getElementById('hard').style.display = 'none';
+                    document.getElementById('again').style.display = 'none';
+                    document.getElementById('showanswer').style.display = '';
+                }}
+            }})
+            .catch((error) => {{
+                console.error('Error:', error);
+            }});
             alert("You rated the card as: " + q);
         }}
     </script>
@@ -176,8 +193,11 @@ pub async fn anki() -> Result<()> {
     let handler = async move |State(spaced_repetition): State<SQLiteHistory>,
                               Path(params): Path<Params>|
                 -> Json<Value> {
-        spaced_repetition.update(params.word, params.q);
-        match spaced_repetition.next_to_review() {
+        spaced_repetition
+            .update(params.word, params.q)
+            .await
+            .unwrap();
+        match spaced_repetition.next_to_review().await {
             Ok(Some(word)) => match query(&word, &temp_dir_path) {
                 Ok(p) => {
                     let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
@@ -189,8 +209,8 @@ pub async fn anki() -> Result<()> {
         }
     };
 
-    /*
-    let static_files_service = ServeDir::new(&temp_dir_path).append_index_html_on_directories(true);
+    let static_files_service =
+        ServeDir::new(temp_dir.path()).append_index_html_on_directories(true);
     let app = Router::new()
         .fallback_service(static_files_service)
         .route("/again/{word}/{q}", get(handler))
@@ -205,7 +225,6 @@ pub async fn anki() -> Result<()> {
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
     println!("open http://127.0.0.1:3333");
     axum::serve(listener, app).await.unwrap();
-     */
 
     Ok(())
 }

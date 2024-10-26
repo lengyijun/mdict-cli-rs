@@ -6,9 +6,10 @@ use dirs::data_dir;
 use fsrs::Card;
 use fsrs::Parameters;
 use fsrs::FSRS;
-use rusqlite::{Connection, DatabaseName, OptionalExtension};
-use std::borrow::Cow;
-use std::cell::Cell;
+use sqlx::migrate::MigrateDatabase;
+use sqlx::sqlite::SqlitePool;
+use sqlx::Row;
+use sqlx::Sqlite;
 use std::fs::create_dir;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -26,29 +27,30 @@ pub fn get_db_path() -> Result<PathBuf> {
 }
 
 /// Check and generate cache directory path.
-pub fn get_db() -> Result<Connection> {
+pub async fn get_db() -> Result<SqlitePool> {
     let path = get_db_path()?;
-    let conn = Connection::open(path)?;
+    let conn = SqlitePool::connect(path.to_str().unwrap()).await?;
     Ok(conn)
 }
 
 /// 只在 非交互式的 情况下使用
-pub fn add_history(word: &str) -> Result<()> {
-    let mut d = crate::fsrs::sqlite_history::SQLiteHistory::default();
-    d.add(word)?;
+pub async fn add_history(word: &str) -> Result<()> {
+    let mut d = crate::fsrs::sqlite_history::SQLiteHistory::default().await;
+    d.add(word).await?;
     Ok(())
 }
 
 /// History stored in an SQLite database.
+#[derive(Clone)]
 pub struct SQLiteHistory {
     max_len: usize,
     ignore_space: bool,
     ignore_dups: bool,
-    path: Option<PathBuf>, // None => memory
-    pub conn: Connection,  /* we need to keep a connection opened at least for in memory
-                            * database and also for cached statement(s) */
-    session_id: usize,         // 0 means no new entry added
-    row_id: Arc<Mutex<usize>>, // max entry id
+    path: PathBuf, // None => memory
+    pub conn: SqlitePool, /* we need to keep a connection opened at least for in memory
+                    * database and also for cached statement(s) */
+    session_id: i32,         // 0 means no new entry added
+    row_id: Arc<Mutex<i32>>, // max entry id
     pub fsrs: FSRS,
 }
 
@@ -63,15 +65,18 @@ https://sqlite.org/lang_vacuum.html
 The VACUUM command may change the ROWIDs of entries in any tables that do not have an explicit INTEGER PRIMARY KEY.
  */
 
-impl Default for SQLiteHistory {
-    fn default() -> Self {
-        Self::new(Some(get_db_path().unwrap())).unwrap()
+impl SQLiteHistory {
+    pub async fn default() -> Self {
+        Self::new(get_db_path().unwrap()).await.unwrap()
     }
 }
 
 impl SQLiteHistory {
-    fn new(path: Option<PathBuf>) -> Result<Self> {
-        let conn = conn(path.as_ref())?;
+    async fn new(path: PathBuf) -> Result<Self> {
+        if !Sqlite::database_exists(path.to_str().unwrap()).await? {
+            Sqlite::create_database(path.to_str().unwrap()).await?;
+        }
+        let conn = conn(&path).await?;
         let mut sh = Self {
             max_len: usize::MAX,
             ignore_space: true,
@@ -83,38 +88,41 @@ impl SQLiteHistory {
             row_id: Arc::new(Mutex::new(0)),
             fsrs: FSRS::new(Parameters::default()),
         };
-        sh.check_schema()?;
+        sh.check_schema().await?;
         Ok(sh)
     }
 
     fn is_mem_or_temp(&self) -> bool {
-        match self.path {
-            None => true,
-            Some(ref p) => is_mem_or_temp(p),
-        }
+        is_mem_or_temp(&self.path)
     }
 
-    fn reset(&mut self, path: &Path) -> Result<Connection> {
-        self.path = normalize(path);
+    async fn reset(&mut self, path: &Path) -> Result<SqlitePool> {
+        self.path = path.to_path_buf();
         self.session_id = 0;
         *self.row_id.lock().unwrap() = 0;
-        Ok(std::mem::replace(&mut self.conn, conn(self.path.as_ref())?))
+        Ok(std::mem::replace(&mut self.conn, conn(&self.path).await?))
     }
 
-    fn update_row_id(&mut self) -> Result<()> {
-        let x = self
-            .conn
-            .query_row("SELECT ifnull(max(rowid), 0) FROM fsrs;", [], |r| r.get(0))?;
+    async fn update_row_id(&mut self) -> Result<()> {
+        let x = sqlx::query("SELECT ifnull(max(rowid), 0) FROM fsrs;")
+            .fetch_one(&self.conn)
+            .await?
+            .get::<i32, _>(0);
+        // let x = self
+        //     .conn
+        //     .query_row(, [], |r| r.get(0))?;
         *self.row_id.lock().unwrap() = x;
         Ok(())
     }
 
-    fn check_schema(&mut self) -> Result<()> {
-        let user_version: i32 = self
-            .conn
-            .pragma_query_value(None, "user_version", |r| r.get(0))?;
+    async fn check_schema(&mut self) -> Result<()> {
+        let user_version = &sqlx::query("pragma user_version;")
+            .fetch_all(&self.conn)
+            .await?[0];
+        let user_version: i32 = user_version.get(0);
+
         if user_version <= 0 {
-            self.conn.execute_batch(
+            sqlx::raw_sql(
                 "
 BEGIN EXCLUSIVE;
 PRAGMA auto_vacuum = INCREMENTAL;
@@ -150,39 +158,44 @@ END;
 PRAGMA user_version = 1;
 COMMIT;
                  ",
-            )?
+            )
+            .execute(&self.conn)
+            .await?;
         }
-        self.conn.pragma_update(None, "foreign_keys", 1)?;
+        sqlx::query("pragma foreign_keys = 1;")
+            .execute(&self.conn)
+            .await?;
         if self.ignore_dups || user_version > 0 {
-            self.set_ignore_dups()?;
+            self.set_ignore_dups().await?;
         }
         if *self.row_id.lock().unwrap() == 0 && user_version > 0 {
-            self.update_row_id()?;
+            self.update_row_id().await?;
         }
         Ok(())
     }
 
-    fn set_ignore_dups(&mut self) -> Result<()> {
+    async fn set_ignore_dups(&mut self) -> Result<()> {
         if self.ignore_dups {
             // TODO Validate: ignore dups only in the same session_id ?
-            self.conn.execute_batch(
-                "CREATE UNIQUE INDEX IF NOT EXISTS ignore_dups ON fsrs(word, session_id);",
-            )?;
+            sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS ignore_dups ON fsrs(word, session_id);")
+                .execute(&self.conn)
+                .await?;
+            Ok(())
         } else {
-            self.conn
-                .execute_batch("DROP INDEX IF EXISTS ignore_dups;")?;
+            sqlx::query("DROP INDEX IF EXISTS ignore_dups;")
+                .execute(&self.conn)
+                .await?;
+            Ok(())
         }
-        Ok(())
     }
 
-    fn create_session(&mut self) -> Result<()> {
+    async fn create_session(&mut self) -> Result<()> {
         if self.session_id == 0 {
-            self.check_schema()?;
-            self.session_id = self.conn.query_row(
-                "INSERT INTO session (id) VALUES (NULL) RETURNING id;",
-                [],
-                |r| r.get(0),
-            )?;
+            self.check_schema().await?;
+            self.session_id = sqlx::query("INSERT INTO session (id) VALUES (NULL) RETURNING id;")
+                .fetch_one(&self.conn)
+                .await?
+                .get::<i32, _>(0);
         }
         Ok(())
     }
@@ -200,66 +213,54 @@ COMMIT;
         false
     }
 
-    fn add_entry(&mut self, word: &str, card: Card) -> Result<bool> {
+    async fn add_entry(&mut self, word: &str, card: Card) -> Result<bool> {
         // ignore SQLITE_CONSTRAINT_UNIQUE
 
         let card_str: String = serde_json::to_string(&card)?;
-        let mut stmt = self.conn.prepare_cached(
-"INSERT OR REPLACE INTO fsrs (session_id, word, card) VALUES (?1, ?2, ?3) RETURNING rowid;",
-        )?;
-        if let Some(row_id) = stmt
-            .query_row((self.session_id, word, card_str), |r| r.get(0))
-            .optional()?
-        {
-            *self.row_id.lock().unwrap() = row_id;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        let done = sqlx::query("INSERT OR REPLACE INTO fsrs (session_id, word, card) VALUES ($1, $2, $3) RETURNING rowid;")
+        .bind(self.session_id)
+        .bind(word)
+        .bind(card_str)
+        .execute(&self.conn).await?;
+
+        let row_id = done.rows_affected();
+        *self.row_id.lock().unwrap() = row_id.try_into().unwrap();
+        Ok(true)
     }
 
-    pub fn delete(&self, term: &str) -> std::result::Result<usize, rusqlite::Error> {
-        self.conn.execute("DELETE FROM fsrs WHERE word=?1;", [term])
+    pub async fn delete(&self, term: &str) -> Result<usize> {
+        let done = sqlx::query("DELETE FROM fsrs WHERE word=$1;")
+            .bind(term)
+            .execute(&self.conn)
+            .await?;
+        Ok(done.rows_affected().try_into().unwrap())
     }
 
-    pub fn add(&mut self, line: &str) -> Result<bool> {
+    pub async fn add(&mut self, line: &str) -> Result<bool> {
         if self.ignore(line) {
             return Ok(false);
         }
         // Do not create a session until the first entry is added.
-        self.create_session()?;
-        self.add_entry(line, Default::default())
+        self.create_session().await?;
+        self.add_entry(line, Default::default()).await
     }
 }
 
-fn conn(path: Option<&PathBuf>) -> rusqlite::Result<Connection> {
-    if let Some(ref path) = path {
-        Connection::open(path)
-    } else {
-        Connection::open_in_memory()
-    }
+async fn conn(path: &Path) -> sqlx::Result<SqlitePool> {
+    SqlitePool::connect(path.to_str().unwrap()).await
 }
 
 const MEMORY: &str = ":memory:";
 
-fn normalize(path: &Path) -> Option<PathBuf> {
-    if path.as_os_str() == MEMORY {
-        None
-    } else {
-        Some(path.to_path_buf())
-    }
-}
 fn is_mem_or_temp(path: &Path) -> bool {
     let os_str = path.as_os_str();
     os_str.is_empty() || os_str == MEMORY
 }
-fn is_same(old: Option<&PathBuf>, new: &Path) -> bool {
-    if let Some(old) = old {
-        old == new // TODO canonicalize ?
-    } else {
-        new.as_os_str() == MEMORY
-    }
+
+fn is_same(old: &PathBuf, new: &Path) -> bool {
+    old == new
 }
+
 fn offset(s: String) -> usize {
     s.split(' ')
         .nth(2)

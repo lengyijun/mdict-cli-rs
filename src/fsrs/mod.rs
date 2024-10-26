@@ -1,42 +1,33 @@
 use crate::spaced_repetition::SpacedRepetiton;
-use crate::utils::sort_str;
 use anyhow::Result;
 use chrono::DateTime;
 use chrono::Duration;
-use chrono::Local;
 use chrono::Utc;
 use fsrs::Card;
-use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use sqlx::Row;
+use sqlx::SqlitePool;
 
 pub mod sqlite_history;
 
-fn next_review_time(last_reviewed: DateTime<Utc>, interval: i64) -> DateTime<Utc> {
-    last_reviewed + Duration::try_days(interval).unwrap()
-}
-
 impl SpacedRepetiton for sqlite_history::SQLiteHistory {
-    fn next_to_review(&self) -> Result<Option<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT word, card FROM fsrs ORDER BY RANDOM()")?;
-        let person_iter = stmt.query_map([], |row| {
-            let card_str: String = row.get(1)?;
-            let word = row.get(0)?;
-            Ok((word, card_str))
-        })?;
-        for (word, card_str) in person_iter.flatten() {
+    async fn next_to_review(&self) -> Result<Option<String>> {
+        let stmt: Vec<(String, String)> =
+            sqlx::query_as("SELECT word, card FROM fsrs ORDER BY RANDOM()")
+                .fetch_all(&self.conn)
+                .await?;
+        for row in stmt {
+            let card_str = row.1;
+            let word = row.0;
             let card: Card = serde_json::from_str(&card_str)?;
-            if next_review_time(card.last_review, card.scheduled_days) <= Utc::now() {
-                return Ok(Some(word));
+            if card.due <= Utc::now() {
+                return Ok(Some(word.to_owned()));
             }
         }
         Ok(None)
     }
 
-    /// requires 1 <= q <= 4
-    fn update(&self, question: String, rating: u8) -> Result<()> {
+    /// requires 1 <= rating <= 4
+    async fn update(&self, question: String, rating: u8) -> Result<()> {
         let rating = match rating {
             1 => fsrs::Rating::Again,
             2 => fsrs::Rating::Hard,
@@ -44,53 +35,38 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
             4 => fsrs::Rating::Easy,
             _ => unreachable!(),
         };
-        let old_card = get_word(&self.conn, &question)?;
+        let old_card = get_word(&self.conn, &question).await?;
         let scheduling_info = self.fsrs.next(old_card, Utc::now(), rating);
-        update(&self.conn, &question, scheduling_info.card)?;
+        update(&self.conn, &question, scheduling_info.card).await?;
         Ok(())
     }
 
-    fn remove(&mut self, question: &str) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM fsrs WHERE word = ?", [question])?;
+    async fn remove(&mut self, question: &str) -> Result<()> {
+        sqlx::query("DELETE FROM fsrs WHERE word = $1")
+            .bind(question)
+            .fetch_one(&self.conn)
+            .await?;
         Ok(())
     }
 }
 
-fn update(conn: &Connection, word: &str, card: Card) -> Result<()> {
+// TODO: never used ?
+async fn update(pool: &SqlitePool, word: &str, card: Card) -> Result<()> {
     let card_str: String = serde_json::to_string(&card)?;
-    conn.execute(
-        "UPDATE fsrs SET card = ?2 5 WHERE word = ?1",
-        (word, card_str),
-    )?;
+    sqlx::query("UPDATE fsrs SET card = $2 WHERE word = $1")
+        .bind(word)
+        .bind(card_str)
+        .fetch_one(pool)
+        .await?;
     Ok(())
 }
 
-fn get_word(conn: &Connection, word: &str) -> Result<Card> {
-    let card_str = conn.query_row("SELECT card FROM fsrs WHERE word = ?", [word], |row| {
-        let card_str: String = row.get(0)?;
-        Ok(card_str)
-    })?;
+async fn get_word(pool: &SqlitePool, word: &str) -> Result<Card> {
+    let card_str: String = sqlx::query("SELECT card FROM fsrs WHERE word = $1")
+        .bind(word)
+        .fetch_one(pool)
+        .await?
+        .get::<String, _>(0);
     let card: Card = serde_json::from_str(&card_str)?;
     Ok(card)
-}
-
-impl sqlite_history::SQLiteHistory {
-    pub fn fuzzy_lookup_in_history(&self, target_word: &str, threhold: usize) -> Vec<String> {
-        let sorted_targetword = sort_str(target_word);
-        let mut stmt = self.conn.prepare("SELECT word FROM fsrs").unwrap();
-        stmt.query_map([], |row| {
-            let word: String = row.get(0).unwrap();
-            if strsim::levenshtein(&word, target_word) <= threhold
-                || sort_str(&word) == sorted_targetword
-            {
-                Ok(word)
-            } else {
-                Err(rusqlite::Error::ExecuteReturnedResults)
-            }
-        })
-        .unwrap()
-        .flatten()
-        .collect()
-    }
 }
