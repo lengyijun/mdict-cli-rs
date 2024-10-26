@@ -64,7 +64,6 @@ pub async fn anki() -> Result<()> {
             bottom: 0;
             left: 0;
             right: 0;
-            background-color: #4CAF50;
             color: white;
             display: flex;
             justify-content: center; /* 居中对齐 */
@@ -73,9 +72,6 @@ pub async fn anki() -> Result<()> {
         .footer button {{
             margin: 0 10px; /* 按钮之间的间距 */
             padding: 10px 15px;
-            background-color: white;
-            color: #4CAF50;
-            border: none;
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s;
@@ -103,19 +99,19 @@ pub async fn anki() -> Result<()> {
             border-radius: 5px;
             cursor: pointer;
         }}
-        .footer .easy {{
+        #easy {{
             background-color: #4CAF50;
             color: white;
         }}
-        .footer .good {{
+        #good {{
             background-color: #2196F3;
             color: white;
         }}
-        .footer .hard {{
+        #hard {{
             background-color: #FF9800;
             color: white;
         }}
-        .footer .again {{
+        #again {{
             background-color: #F44336;
             color: white;
         }}
@@ -132,22 +128,27 @@ pub async fn anki() -> Result<()> {
     </div>
 
     <div class="footer">
-        <button id="jiting" class="button" onclick="showAnswer()">Show Answer</button>
-        <button class="hewen button easy"  onclick="rate('easy')"  style="display: none;">Easy</button>
-        <button class="hewen button good"  onclick="rate('good')"  style="display: none;">Good</button>
-        <button class="hewen button hard"  onclick="rate('hard')"  style="display: none;">Hard</button>
-        <button class="hewen button again" onclick="rate('again')" style="display: none;">Again</button>
+        <button id="showanswer" class="button" onclick="showAnswer()">Show Answer</button>
+        <button id="easy"       class="button" onclick="rate(4)" style="display: none;">Easy</button>
+        <button id="good"       class="button" onclick="rate(3)" style="display: none;">Good</button>
+        <button id="hard"       class="button" onclick="rate(2)" style="display: none;">Hard</button>
+        <button id="again"      class="button" onclick="rate(1)" style="display: none;">Again</button>
     </div>
 
     <script>
+        var word = {word};
+
         function showAnswer() {{
             document.getElementById('answer').src= "{}/index.html";
-            document.querySelectorAll('.hewen').forEach(x => x.style.display = '' );
-            document.getElementById('jiting').style.display = 'none';
+            document.getElementById('easy').style.display = '';
+            document.getElementById('good').style.display = '';
+            document.getElementById('hard').style.display = '';
+            document.getElementById('again').style.display = '';
+            document.getElementById('showanswer').style.display = 'none';
         }}
 
-        function rate(option) {{
-            alert("You rated the card as: " + option);
+        function rate(q) {{
+            alert("You rated the card as: " + q);
         }}
     </script>
 
