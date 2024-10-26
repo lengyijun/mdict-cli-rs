@@ -1,10 +1,11 @@
 //! https://github.com/kkawakam/rustyline/blob/master/src/sqlite_history.rs
 //! History impl. based on SQLite
-use crate::fsrs::MemoryStateWrapper;
 use anyhow::Context;
 use anyhow::Result;
 use dirs::data_dir;
-use fsrs::{DEFAULT_PARAMETERS, FSRS};
+use fsrs::Card;
+use fsrs::Parameters;
+use fsrs::FSRS;
 use rusqlite::{Connection, DatabaseName, OptionalExtension};
 use std::borrow::Cow;
 use std::cell::Cell;
@@ -39,7 +40,6 @@ pub fn add_history(word: &str) -> Result<()> {
 }
 
 /// History stored in an SQLite database.
-#[derive(Clone)]
 pub struct SQLiteHistory {
     max_len: usize,
     ignore_space: bool,
@@ -81,7 +81,7 @@ impl SQLiteHistory {
             conn,
             session_id: 0,
             row_id: Arc::new(Mutex::new(0)),
-            fsrs: FSRS::new(Some(&DEFAULT_PARAMETERS)).unwrap(),
+            fsrs: FSRS::new(Parameters::default()),
         };
         sh.check_schema()?;
         Ok(sh)
@@ -125,12 +125,13 @@ CREATE TABLE session (
 CREATE TABLE fsrs (
     --entry TEXT NOT NULL,
     word TEXT PRIMARY KEY,
-    difficulty REAL NOT NULL,
-    stability REAL NOT NULL,
-    interval REAL NOT NULL,
-    last_reviewed TEXT NOT NULL,
+    card TEXT NOT NULL,
     session_id INTEGER NOT NULL,
-    --timestamp REAL NOT NULL DEFAULT (julianday('now')),
+    -- difficulty REAL NOT NULL,
+    -- stability REAL NOT NULL,
+    -- interval REAL NOT NULL,
+    -- last_reviewed TEXT NOT NULL,
+    -- timestamp REAL NOT NULL DEFAULT (julianday('now')),
     FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
 ) STRICT;
 CREATE VIRTUAL TABLE fts USING fts4(content=fsrs, word);
@@ -199,23 +200,15 @@ COMMIT;
         false
     }
 
-    fn add_entry(&mut self, line: &str, sm: MemoryStateWrapper) -> Result<bool> {
+    fn add_entry(&mut self, word: &str, card: Card) -> Result<bool> {
         // ignore SQLITE_CONSTRAINT_UNIQUE
+
+        let card_str: String = serde_json::to_string(&card)?;
         let mut stmt = self.conn.prepare_cached(
-"INSERT OR REPLACE INTO fsrs (session_id, word, stability, difficulty, interval, last_reviewed) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING rowid;",
+"INSERT OR REPLACE INTO fsrs (session_id, word, card) VALUES (?1, ?2, ?3) RETURNING rowid;",
         )?;
         if let Some(row_id) = stmt
-            .query_row(
-                (
-                    self.session_id,
-                    line,
-                    sm.stability,
-                    sm.difficulty,
-                    sm.interval,
-                    sm.last_reviewed.to_string(),
-                ),
-                |r| r.get(0),
-            )
+            .query_row((self.session_id, word, card_str), |r| r.get(0))
             .optional()?
         {
             *self.row_id.lock().unwrap() = row_id;

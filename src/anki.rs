@@ -189,6 +189,7 @@ pub async fn anki() -> Result<()> {
         }
     };
 
+    /*
     let static_files_service = ServeDir::new(&temp_dir_path).append_index_html_on_directories(true);
     let app = Router::new()
         .fallback_service(static_files_service)
@@ -204,6 +205,7 @@ pub async fn anki() -> Result<()> {
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
     println!("open http://127.0.0.1:3333");
     axum::serve(listener, app).await.unwrap();
+     */
 
     Ok(())
 }
