@@ -1,3 +1,4 @@
+use crate::fsrs::sqlite_history::SQLiteHistory;
 use crate::utils::create_sub_dir;
 use crate::{
     query,
@@ -5,6 +6,7 @@ use crate::{
 };
 use anyhow::Result;
 use axum::extract::Path;
+use axum::extract::State;
 use axum::Json;
 use axum::{
     response::sse::{Event, Sse},
@@ -29,7 +31,7 @@ pub async fn anki() -> Result<()> {
     let temp_dir = tempfile::Builder::new().prefix("review-").tempdir()?;
     let temp_dir_path = temp_dir.path().to_path_buf();
 
-    let spaced_repetition = crate::fsrs::sqlite_history::SQLiteHistory::default();
+    let spaced_repetition = SQLiteHistory::default();
     let Ok(Some(word)) = spaced_repetition.next_to_review() else {
         println!("no word to review");
         return Ok(());
@@ -171,7 +173,9 @@ pub async fn anki() -> Result<()> {
     });
 
     // async fn handler(Path(params): Path<Params>) -> impl IntoResponse {
-    let handler = async move |Path(params): Path<Params>| -> Json<Value> {
+    let handler = async move |State(spaced_repetition): State<SQLiteHistory>,
+                              Path(params): Path<Params>|
+                -> Json<Value> {
         spaced_repetition.update(params.word, params.q);
         match spaced_repetition.next_to_review() {
             Ok(Some(word)) => match query(&word, &temp_dir_path) {
@@ -189,6 +193,7 @@ pub async fn anki() -> Result<()> {
     let app = Router::new()
         .fallback_service(static_files_service)
         .route("/again/{word}/{q}", get(handler))
+        .with_state(spaced_repetition)
         // .route("/hard", get(sse_handler))
         // .route("/good", get(sse_handler))
         // .route("/easy", get(sse_handler))
