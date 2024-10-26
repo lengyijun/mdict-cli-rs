@@ -21,7 +21,7 @@ use tokio_stream::StreamExt as _;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-pub fn anki() -> Result<()> {
+pub async fn anki() -> Result<()> {
     let temp_dir = tempfile::Builder::new().prefix("review-").tempdir()?;
     let temp_dir_path = temp_dir.path().to_path_buf();
 
@@ -158,13 +158,15 @@ pub fn anki() -> Result<()> {
 
     File::create(temp_dir_path.join("index.html"))?.write_all(html.as_bytes())?;
 
-    let server_thread = thread::spawn(|| block_on(foo(temp_dir_path)));
+    let server_thread = thread::spawn(|| {
+        let _ = Command::new("carbonyl")
+            .arg("http://127.0.0.1:3333")
+            .status()
+            .unwrap();
+    });
 
-    let _ = server_thread.join().unwrap();
-    let _ = Command::new("carbonyl")
-        .arg("http://127.0.0.1:3333")
-        .status()?;
-    loop {}
+    foo(temp_dir_path).await;
+
     Ok(())
 }
 

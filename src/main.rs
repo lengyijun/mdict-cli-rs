@@ -25,10 +25,11 @@ mod spaced_repetition;
 mod stardict;
 mod utils;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
     if word == "anki" {
-        anki::anki()?;
+        anki::anki().await?;
         Ok(())
     } else {
         let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
