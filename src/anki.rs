@@ -12,6 +12,7 @@ use axum::{
 use axum_extra::TypedHeader;
 use futures::executor::block_on;
 use futures::stream::{self, Stream};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
@@ -166,29 +167,28 @@ pub async fn anki() -> Result<()> {
             .unwrap();
     });
 
-    foo(temp_dir_path).await;
-
-    Ok(())
-}
-
-async fn foo(p: PathBuf) {
-    let app = app(p);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
-        .await
-        .unwrap();
-    tracing::debug!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
-}
-
-fn app(p: PathBuf) -> Router {
-    let static_files_service = ServeDir::new(p).append_index_html_on_directories(true);
-    Router::new()
+    let static_files_service = ServeDir::new(temp_dir_path).append_index_html_on_directories(true);
+    let app = Router::new()
         .fallback_service(static_files_service)
         .route("/again", get(sse_handler))
         .route("/hard", get(sse_handler))
         .route("/good", get(sse_handler))
         .route("/easy", get(sse_handler))
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
+        .await
+        .unwrap();
+    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    println!("open http://127.0.0.1:3333");
+    axum::serve(listener, app).await.unwrap();
+
+    Ok(())
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Params {
+    word: String,
+    q: u8,
 }
 
 async fn sse_handler(
