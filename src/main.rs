@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use anyhow::Result;
 use fsrs::sqlite_history::add_history;
 use rayon::prelude::*;
+use shadow_rs::shadow;
 use stardict::StarDict;
 use std::ffi::OsStr;
 use std::path::Path;
@@ -25,18 +26,27 @@ mod spaced_repetition;
 mod stardict;
 mod utils;
 
+shadow!(build);
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
-    if word == "anki" {
-        anki::anki().await?;
-        Ok(())
-    } else {
-        let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
-        let index_html = query(&word, temp_dir.path())?;
-        add_history(&word).await?;
-        let _ = Command::new("carbonyl").arg(index_html).status()?;
-        Ok(())
+    match &*word {
+        "--version" => {
+            println!("{}", build::VERSION); //print version const
+            Ok(())
+        }
+        "anki" => {
+            anki::anki().await?;
+            Ok(())
+        }
+        _ => {
+            let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
+            let index_html = query(&word, temp_dir.path())?;
+            add_history(&word).await?;
+            let _ = Command::new("carbonyl").arg(index_html).status()?;
+            Ok(())
+        }
     }
 }
 
