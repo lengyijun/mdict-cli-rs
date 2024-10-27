@@ -26,13 +26,6 @@ pub fn get_db_path() -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Check and generate cache directory path.
-pub async fn get_db() -> Result<SqlitePool> {
-    let path = get_db_path()?;
-    let conn = SqlitePool::connect(path.to_str().unwrap()).await?;
-    Ok(conn)
-}
-
 /// 只在 非交互式的 情况下使用
 pub async fn add_history(word: &str) -> Result<()> {
     let mut d = crate::fsrs::sqlite_history::SQLiteHistory::default().await;
@@ -46,9 +39,9 @@ pub struct SQLiteHistory {
     max_len: usize,
     ignore_space: bool,
     ignore_dups: bool,
-    path: PathBuf, // None => memory
+    path: PathBuf,
     pub conn: SqlitePool, /* we need to keep a connection opened at least for in memory
-                    * database and also for cached statement(s) */
+                           * database and also for cached statement(s) */
     session_id: i32,         // 0 means no new entry added
     row_id: Arc<Mutex<i32>>, // max entry id
     pub fsrs: FSRS,
@@ -69,9 +62,7 @@ impl SQLiteHistory {
     pub async fn default() -> Self {
         Self::new(get_db_path().unwrap()).await.unwrap()
     }
-}
 
-impl SQLiteHistory {
     async fn new(path: PathBuf) -> Result<Self> {
         if !Sqlite::database_exists(path.to_str().unwrap()).await? {
             Sqlite::create_database(path.to_str().unwrap()).await?;
@@ -92,10 +83,6 @@ impl SQLiteHistory {
         Ok(sh)
     }
 
-    fn is_mem_or_temp(&self) -> bool {
-        is_mem_or_temp(&self.path)
-    }
-
     async fn reset(&mut self, path: &Path) -> Result<SqlitePool> {
         self.path = path.to_path_buf();
         self.session_id = 0;
@@ -108,9 +95,6 @@ impl SQLiteHistory {
             .fetch_one(&self.conn)
             .await?
             .get::<i32, _>(0);
-        // let x = self
-        //     .conn
-        //     .query_row(, [], |r| r.get(0))?;
         *self.row_id.lock().unwrap() = x;
         Ok(())
     }
@@ -248,22 +232,4 @@ COMMIT;
 
 async fn conn(path: &Path) -> sqlx::Result<SqlitePool> {
     SqlitePool::connect(path.to_str().unwrap()).await
-}
-
-const MEMORY: &str = ":memory:";
-
-fn is_mem_or_temp(path: &Path) -> bool {
-    let os_str = path.as_os_str();
-    os_str.is_empty() || os_str == MEMORY
-}
-
-fn is_same(old: &PathBuf, new: &Path) -> bool {
-    old == new
-}
-
-fn offset(s: String) -> usize {
-    s.split(' ')
-        .nth(2)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0)
 }

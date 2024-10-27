@@ -1,8 +1,6 @@
 use crate::spaced_repetition::SpacedRepetiton;
 use anyhow::Context;
 use anyhow::Result;
-use chrono::DateTime;
-use chrono::Duration;
 use chrono::Utc;
 use fsrs::Card;
 use sqlx::Row;

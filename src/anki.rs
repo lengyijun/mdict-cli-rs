@@ -3,19 +3,15 @@ use crate::utils::create_sub_dir;
 use crate::{query, spaced_repetition::SpacedRepetiton};
 use anyhow::Result;
 use axum::extract::State;
-use axum::response::sse::{Event, Sse};
 use axum::routing::post;
 use axum::Json;
 use axum::Router;
-use axum_extra::TypedHeader;
-use futures::stream::{self, Stream};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 use std::thread;
-use tokio_stream::StreamExt as _;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
@@ -188,12 +184,14 @@ pub async fn anki() -> Result<()> {
 
     File::create(temp_dir_path.join("index.html"))?.write_all(html.as_bytes())?;
 
+    /*
     let server_thread = thread::spawn(|| {
-        // let _ = Command::new("carbonyl")
-        //     .arg("http://127.0.0.1:3333")
-        //     .status()
-        //     .unwrap();
+        let _ = Command::new("carbonyl")
+            .arg("http://127.0.0.1:3333")
+            .status()
+            .unwrap();
     });
+     */
 
     // async fn handler(Path(params): Path<Params>) -> impl IntoResponse {
     let handler = async move |State(spaced_repetition): State<SQLiteHistory>,
