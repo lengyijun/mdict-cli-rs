@@ -1,5 +1,6 @@
 use crate::fsrs::sqlite_history::SQLiteHistory;
 use crate::utils::create_sub_dir;
+use crate::utils::rating_from_u8;
 use crate::{query, spaced_repetition::SpacedRepetiton};
 use anyhow::Result;
 use axum::extract::State;
@@ -197,8 +198,10 @@ pub async fn anki() -> Result<()> {
     let handler = async move |State(spaced_repetition): State<SQLiteHistory>,
                               Json(params): Json<Params>|
                 -> Json<Value> {
+        let rating = rating_from_u8(params.rating);
+        println!("{} {:?}", params.word, rating);
         spaced_repetition
-            .update(&params.word, params.rating)
+            .update(&params.word, rating)
             .await
             .unwrap();
         match spaced_repetition.next_to_review().await {
@@ -207,6 +210,7 @@ pub async fn anki() -> Result<()> {
                 match query(&word, &p) {
                     Ok(_) => {
                         let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
+                        println!("{word}");
                         Json(json!({ "word": word, "p" : filename }))
                     }
                     Err(_) => Json(json!({ "finished": true })),

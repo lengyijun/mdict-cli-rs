@@ -3,6 +3,7 @@ use anyhow::Context;
 use anyhow::Result;
 use chrono::Utc;
 use fsrs::Card;
+use fsrs::Rating;
 use sqlx::Row;
 use sqlx::SqlitePool;
 
@@ -25,15 +26,7 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
         Ok(None)
     }
 
-    /// requires 1 <= rating <= 4
-    async fn update(&self, question: &str, rating: u8) -> Result<()> {
-        let rating = match rating {
-            1 => fsrs::Rating::Again,
-            2 => fsrs::Rating::Hard,
-            3 => fsrs::Rating::Good,
-            4 => fsrs::Rating::Easy,
-            _ => unreachable!(),
-        };
+    async fn update(&self, question: &str, rating: Rating) -> Result<()> {
         let old_card = get_word(&self.conn, question)
             .await
             .context("get old card fail")?;
