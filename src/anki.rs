@@ -21,7 +21,7 @@ pub async fn anki() -> Result<()> {
     let temp_dir_path = temp_dir.path().to_path_buf();
 
     let spaced_repetition = SQLiteHistory::default().await;
-    let Ok(Some(word)) = spaced_repetition.next_to_review().await else {
+    let Ok(word) = spaced_repetition.next_to_review().await else {
         println!("no word to review");
         return Ok(());
     };
@@ -205,7 +205,7 @@ pub async fn anki() -> Result<()> {
             .await
             .unwrap();
         match spaced_repetition.next_to_review().await {
-            Ok(Some(word)) => {
+            Ok(word) => {
                 let p = create_sub_dir(&temp_dir_path, &word).unwrap();
                 match query(&word, &p) {
                     Ok(_) => {

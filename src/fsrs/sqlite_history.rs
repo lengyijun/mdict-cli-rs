@@ -117,12 +117,17 @@ CREATE TABLE session (
 CREATE TABLE fsrs (
     --entry TEXT NOT NULL,
     word TEXT PRIMARY KEY,
-    card TEXT NOT NULL,
+    due TEXT NOT NULL,
+    stability REAL NOT NULL,
+    difficulty REAL NOT NULL,
+    elapsed_days INTEGER NOT NULL,
+    scheduled_days INTEGER NOT NULL,
+    reps INTEGER NOT NULL,
+    lapses INTEGER NOT NULL,
+    state TEXT NOT NULL,
+    last_review TEXT NOT NULL,
     session_id INTEGER NOT NULL,
-    -- difficulty REAL NOT NULL,
-    -- stability REAL NOT NULL,
-    -- interval REAL NOT NULL,
-    -- last_reviewed TEXT NOT NULL,
+    -- card TEXT NOT NULL,
     -- timestamp REAL NOT NULL DEFAULT (julianday('now')),
     FOREIGN KEY (session_id) REFERENCES session(id) ON DELETE CASCADE
 ) STRICT;
@@ -200,11 +205,18 @@ COMMIT;
     async fn add_entry(&mut self, word: &str, card: Card) -> Result<bool> {
         // ignore SQLITE_CONSTRAINT_UNIQUE
 
-        let card_str: String = serde_json::to_string(&card)?;
-        let done = sqlx::query("INSERT OR REPLACE INTO fsrs (session_id, word, card) VALUES ($1, $2, $3) RETURNING rowid;")
+        let done = sqlx::query("INSERT OR REPLACE INTO fsrs (session_id, word, due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_review) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING rowid;")
         .bind(self.session_id)
         .bind(word)
-        .bind(card_str)
+        .bind(serde_json::to_string(&card.due)?)
+        .bind(card.stability)
+        .bind(card.difficulty)
+        .bind(card.elapsed_days)
+        .bind(card.scheduled_days)
+        .bind(card.reps)
+        .bind(card.lapses)
+        .bind(serde_json::to_string(&card.state)?)
+        .bind(serde_json::to_string(&card.last_review)?)
         .execute(&self.conn).await?;
 
         let row_id = done.rows_affected();
