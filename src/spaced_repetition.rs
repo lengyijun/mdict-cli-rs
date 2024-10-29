@@ -1,5 +1,5 @@
 use anyhow::Result;
-use fsrs::Rating;
+use rs_fsrs::Rating;
 
 pub trait SpacedRepetiton: Sized {
     /// find next reviewable word

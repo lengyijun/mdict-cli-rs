@@ -2,8 +2,8 @@ use crate::spaced_repetition::SpacedRepetiton;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::Utc;
-use fsrs::Card;
-use fsrs::Rating;
+use rs_fsrs::Card;
+use rs_fsrs::Rating;
 use sqlx::Row;
 use sqlx::SqlitePool;
 

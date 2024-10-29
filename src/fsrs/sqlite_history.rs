@@ -3,9 +3,9 @@
 use anyhow::Context;
 use anyhow::Result;
 use dirs::data_dir;
-use fsrs::Card;
-use fsrs::Parameters;
-use fsrs::FSRS;
+use rs_fsrs::Card;
+use rs_fsrs::Parameters;
+use rs_fsrs::FSRS;
 use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::SqlitePool;
 use sqlx::Row;

@@ -1,15 +1,15 @@
 use anyhow::Context;
 use anyhow::Result;
-use fsrs::Rating;
+use rs_fsrs::Rating;
 use std::path::Path;
 use std::path::PathBuf;
 
 pub fn rating_from_u8(q: u8) -> Rating {
     match q {
-        1 => fsrs::Rating::Again,
-        2 => fsrs::Rating::Hard,
-        3 => fsrs::Rating::Good,
-        4 => fsrs::Rating::Easy,
+        1 => rs_fsrs::Rating::Again,
+        2 => rs_fsrs::Rating::Hard,
+        3 => rs_fsrs::Rating::Good,
+        4 => rs_fsrs::Rating::Easy,
         _ => unreachable!(),
     }
 }
