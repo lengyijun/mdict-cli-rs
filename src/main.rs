@@ -2,12 +2,14 @@
 
 use crate::mdict_wrapper::Mdict;
 use anyhow::anyhow;
+use anyhow::Context;
 use anyhow::Result;
 use fsrs::sqlite_history::add_history;
 use rayon::prelude::*;
 use shadow_rs::shadow;
 use stardict::StarDict;
 use std::ffi::OsStr;
+use std::fs::create_dir;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::{
@@ -34,6 +36,22 @@ async fn main() -> Result<()> {
     match &*word {
         "--version" => {
             println!("{}", build::VERSION); //print version const
+            Ok(())
+        }
+        "--list-dict" | "--list-dicts" => {
+            let v = load_dict();
+            if v.is_empty() {
+                println!("no dictionary found in {:?}", dictionary_dir());
+                return Ok(());
+            }
+            for dict in v {
+                println!("{:?}", dict.path());
+            }
+            Ok(())
+        }
+        "--show-path" => {
+            println!("dictionary dir            {:?}", dictionary_dir());
+            println!("history database          {:?}", db_path());
             Ok(())
         }
         "anki" => {
@@ -185,9 +203,23 @@ fn query(word: &str, base_dir: &Path) -> Result<PathBuf> {
     Ok(index_html)
 }
 
+fn dictionary_dir() -> PathBuf {
+    let path = dirs::data_local_dir().unwrap().join("mdict-cli-rs");
+    if !path.exists() {
+        create_dir(&path)
+            .with_context(|| format!("Failed to create directory {:?}", path))
+            .unwrap();
+    }
+    path
+}
+
+fn db_path() -> PathBuf {
+    dictionary_dir().join("history.db")
+}
+
 // load mdict or stardict
 fn load_dict() -> Vec<Box<dyn T>> {
-    let d = dirs::data_local_dir().unwrap().join("mdict-cli-rs");
+    let d = dictionary_dir();
 
     let mut v: Vec<Box<dyn T>> = Vec::new();
 
@@ -223,6 +255,9 @@ fn load_dict() -> Vec<Box<dyn T>> {
 trait T: Send {
     /// display on button
     fn name(&self) -> &str;
+
+    /// path to dict
+    fn path(&self) -> &Path;
 
     /// write the result in @return/index.html
     fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf>;

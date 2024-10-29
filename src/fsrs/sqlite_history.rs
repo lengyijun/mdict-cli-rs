@@ -1,8 +1,7 @@
 //! https://github.com/kkawakam/rustyline/blob/master/src/sqlite_history.rs
 //! History impl. based on SQLite
-use anyhow::Context;
+use crate::db_path;
 use anyhow::Result;
-use dirs::data_dir;
 use rs_fsrs::Card;
 use rs_fsrs::Parameters;
 use rs_fsrs::FSRS;
@@ -10,21 +9,10 @@ use sqlx::migrate::MigrateDatabase;
 use sqlx::sqlite::SqlitePool;
 use sqlx::Row;
 use sqlx::Sqlite;
-use std::fs::create_dir;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::usize;
-
-pub fn get_db_path() -> Result<PathBuf> {
-    let mut path = data_dir().with_context(|| "Couldn't find data directory")?;
-    path.push("mdict-cli-rs");
-    if !path.exists() {
-        create_dir(&path).with_context(|| format!("Failed to create directory {:?}", path))?;
-    }
-    path.push("history.db");
-    Ok(path)
-}
 
 /// 只在 非交互式的 情况下使用
 pub async fn add_history(word: &str) -> Result<()> {
@@ -60,7 +48,7 @@ The VACUUM command may change the ROWIDs of entries in any tables that do not ha
 
 impl SQLiteHistory {
     pub async fn default() -> Self {
-        Self::new(get_db_path().unwrap()).await.unwrap()
+        Self::new(db_path()).await.unwrap()
     }
 
     async fn new(path: PathBuf) -> Result<Self> {

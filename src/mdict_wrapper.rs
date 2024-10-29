@@ -37,6 +37,10 @@ impl T for Mdict {
         self.mdx_path.file_name().unwrap().to_str().unwrap()
     }
 
+    fn path(&self) -> &Path {
+        &self.mdx_path
+    }
+
     fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf> {
         let mut mdx = MDictBuilder::new(&self.mdx_path).build_with_key_maker(MyKeyMaker)?;
         let definition = mdx.lookup(&word)?;

@@ -287,6 +287,13 @@ impl DictType {
             DictType::Dict(path) => Ok(fs::read_to_string(path)?),
         }
     }
+
+    fn path(&self) -> &Path {
+        match self {
+            DictType::Dz(path_buf) => path_buf,
+            DictType::Dict(path_buf) => path_buf,
+        }
+    }
 }
 
 pub struct Dict {
@@ -399,6 +406,10 @@ impl Idx {
 impl T for StarDict {
     fn name(&self) -> &str {
         self.dict_name()
+    }
+
+    fn path(&self) -> &Path {
+        self.dict.dict_type.path()
     }
 
     fn lookup(&self, word: &str, base_dir: &std::path::Path) -> Result<PathBuf> {

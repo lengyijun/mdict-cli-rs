@@ -25,6 +25,9 @@ mdict-cli-rs <word>
 # anki-like review mode
 # open http://127.0.0.1:3333 in browser
 mdict-cli-rs anki
+
+mdict-cli-rs --list-dicts
+mdict-cli-rs --show-path
 ```
 
 ### blog in Chinese
