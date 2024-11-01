@@ -10,9 +10,12 @@ use axum::Router;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::fs::File;
+use std::ffi::CString;
+use std::fs::{File, OpenOptions};
+use std::io::prelude::*;
 use std::io::Write;
 use std::process::Command;
+use std::sync::mpsc::channel;
 use std::thread;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -192,15 +195,15 @@ pub async fn anki() -> Result<()> {
     );
 
     File::create(temp_dir_path.join("index.html"))?.write_all(html.as_bytes())?;
+    let (sender, receiver) = channel();
 
-    /*
-    let server_thread = thread::spawn(|| {
+    let server_thread = thread::spawn(move || {
+        let _ = receiver.recv().unwrap();
         let _ = Command::new("carbonyl")
             .arg("http://127.0.0.1:3333")
             .status()
             .unwrap();
     });
-     */
 
     // async fn handler(Path(params): Path<Params>) -> impl IntoResponse {
     let handler = async move |State(spaced_repetition): State<SQLiteHistory>,
@@ -238,6 +241,7 @@ pub async fn anki() -> Result<()> {
         .await
         .unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    sender.send(1).unwrap();
     println!("open http://127.0.0.1:3333");
     axum::serve(listener, app).await.unwrap();
 
