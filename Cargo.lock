@@ -1283,6 +1283,7 @@ dependencies = [
  "futures",
  "headers",
  "html_parser",
+ "libc",
  "mdict",
  "rayon",
  "rs-fsrs",

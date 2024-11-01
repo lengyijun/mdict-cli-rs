@@ -9,7 +9,9 @@ use axum::Json;
 use axum::Router;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::fs::File;
+use std::ffi::CString;
+use std::fs::{File, OpenOptions};
+use std::io::prelude::*;
 use std::io::Write;
 use std::process::Command;
 use std::thread;
@@ -231,6 +233,8 @@ pub async fn anki() -> Result<()> {
         .await
         .unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    println!("before");
+    send_signal();
     println!("open http://127.0.0.1:3333");
     axum::serve(listener, app).await.unwrap();
 
@@ -241,4 +245,22 @@ pub async fn anki() -> Result<()> {
 struct Params {
     word: String,
     rating: u8,
+}
+
+fn send_signal() {
+    let path = "/tmp/my_pipe";
+
+    /*
+        let filename = CString::new(path).unwrap();
+        unsafe {
+            libc::mkfifo(filename.as_ptr(), 0o644);
+        }
+    */
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .open(path)
+        .expect("Failed to open named pipe for writing");
+
+    file.write_all("ready".as_bytes()).expect("failed");
 }
