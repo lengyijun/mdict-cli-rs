@@ -43,7 +43,7 @@ impl T for Mdict {
 
     fn lookup(&self, word: &str, base_dir: &Path) -> Result<PathBuf> {
         let mut mdx = MDictBuilder::new(&self.mdx_path).build_with_key_maker(MyKeyMaker)?;
-        let definition = mdx.lookup(&word)?;
+        let definition = mdx.lookup(word)?;
         let Some(definition) = definition else {
             return Result::Err(anyhow!("not found"));
         };

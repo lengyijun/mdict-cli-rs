@@ -228,7 +228,7 @@ fn load_dict() -> Vec<Box<dyn T>> {
         if entry.file_type().is_dir() {
             continue;
         }
-        if let Some(extension) = entry.path().extension().map(OsStr::to_str).flatten() {
+        if let Some(extension) = entry.path().extension().and_then(OsStr::to_str) {
             match extension {
                 "mdx" => {
                     v.push(Box::new(Mdict {

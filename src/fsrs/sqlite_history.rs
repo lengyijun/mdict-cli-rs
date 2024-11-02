@@ -12,7 +12,6 @@ use sqlx::Sqlite;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::usize;
 
 /// 只在 非交互式的 情况下使用
 pub async fn add_history(word: &str) -> Result<()> {
