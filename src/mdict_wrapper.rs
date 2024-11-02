@@ -48,25 +48,23 @@ impl T for Mdict {
             return Result::Err(anyhow!("not found"));
         };
 
-        let selected = (&self.mdx_path, definition.definition);
-
         let base_dir = create_sub_dir(
             base_dir,
-            &groom_name(selected.0.file_name().unwrap().to_str().unwrap()),
+            &groom_name(self.mdx_path.file_name().unwrap().to_str().unwrap()),
         )?;
 
         let index_html = base_dir.join("index.html");
-        File::create(&index_html)?.write_all(selected.1.as_bytes())?;
+        File::create(&index_html)?.write_all(definition.definition.as_bytes())?;
 
-        let mdd_path = selected.0.with_extension("mdd");
+        let mdd_path = self.mdx_path.with_extension("mdd");
         let mut mdd = MDictBuilder::new(&mdd_path).build_with_key_maker(MyKeyMaker);
 
         let mut resources: HashSet<String> = HashSet::new();
-        let dom = Html::parse_document(&selected.1);
+        let dom = Html::parse_document(&definition.definition);
         dfs(dom.tree.root(), &mut resources);
         for resource in resources {
             let p = {
-                let mut p = selected.0.clone();
+                let mut p = self.mdx_path.clone();
                 p.pop();
                 p.push(&resource);
                 p
