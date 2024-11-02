@@ -168,8 +168,19 @@ pub async fn anki() -> Result<()> {
             .then(response => response.json())
             .then(data => {{
                 if(data.finished) {{
-                    console.log("Congratulation! All cards reviewed");
-                    alert("Congratulation! All cards reviewed")
+                    document.getElementById('easy').style.display = 'none';
+                    document.getElementById('good').style.display = 'none';
+                    document.getElementById('hard').style.display = 'none';
+                    document.getElementById('again').style.display = 'none';
+                    document.getElementById('showanswer').style.display = 'none';
+
+                    document.getElementById("header").textContent = "Congratuation! All cards reviewed";
+
+                    const iframe = document.getElementById('answer');
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    iframeDoc.open();
+                    iframeDoc.write('<h1>Congratulation !</h1><p>All cards reviewed !</p>');
+                    iframeDoc.close();
                 }}else{{
                     document.getElementById("header").textContent = data.word;
                     document.getElementById('answer').src = "about:blank";
