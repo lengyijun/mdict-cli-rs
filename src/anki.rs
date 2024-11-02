@@ -240,7 +240,6 @@ pub async fn anki() -> Result<()> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
         .await
         .unwrap();
-    tracing::debug!("listening on {}", listener.local_addr().unwrap());
     sender.send(1).unwrap();
     println!("open http://127.0.0.1:3333");
     axum::serve(listener, app).await.unwrap();
