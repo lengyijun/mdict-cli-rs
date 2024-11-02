@@ -12,7 +12,7 @@ pub mod sqlite_history;
 impl SpacedRepetiton for sqlite_history::SQLiteHistory {
     async fn next_to_review(&self) -> Result<String> {
         let word: String =
-            sqlx::query("SELECT word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' LIMIT 1;")
+            sqlx::query("SELECT word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' ORDER BY RANDOM() LIMIT 1;")
                 .fetch_one(&self.conn)
                 .await?
                 .get(0);
