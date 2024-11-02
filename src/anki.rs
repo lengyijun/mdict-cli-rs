@@ -7,6 +7,7 @@ use axum::extract::State;
 use axum::routing::post;
 use axum::Json;
 use axum::Router;
+use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs::File;
@@ -206,7 +207,7 @@ pub async fn anki() -> Result<()> {
                               Json(params): Json<Params>|
                 -> Json<Value> {
         let rating = rating_from_u8(params.rating);
-        println!("{} {:?}", params.word, rating);
+        info!("{} {:?}", params.word, rating);
         spaced_repetition
             .update(&params.word, rating)
             .await
@@ -217,7 +218,6 @@ pub async fn anki() -> Result<()> {
                 match query(&word, &p) {
                     Ok(_) => {
                         let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
-                        println!("{word}");
                         Json(json!({ "word": word, "p" : filename }))
                     }
                     Err(_) => Json(json!({ "finished": true })),

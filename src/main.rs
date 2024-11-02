@@ -4,12 +4,16 @@ use crate::mdict_wrapper::Mdict;
 use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
+use chrono::prelude::*;
+use env_logger::Target;
 use fsrs::sqlite_history::add_history;
+use log::*;
 use rayon::prelude::*;
 use shadow_rs::shadow;
 use stardict::StarDict;
 use std::ffi::OsStr;
 use std::fs::create_dir;
+use std::fs::OpenOptions;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::{
@@ -56,13 +60,34 @@ async fn main() -> Result<()> {
         "--show-path" => {
             println!("dictionary dir            {:?}", dictionary_dir());
             println!("history database          {:?}", db_path());
+            println!("log dir                   {:?}", log_dir());
             Ok(())
         }
         "anki" => {
+            let local: DateTime<Local> = Local::now();
+            let log_path = log_dir().join(format!("log.{}", local.to_rfc3339()));
+
+            let log_file = Box::new(
+                OpenOptions::new()
+                    .read(true)
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)?,
+            );
+            println!("log file: {:?}", log_path);
+
+            env_logger::Builder::from_default_env()
+                .target(Target::Pipe(log_file))
+                .filter_level(log::LevelFilter::Info) // Set the minimum log level
+                .init();
             anki::anki().await?;
             Ok(())
         }
         _ => {
+            env_logger::Builder::from_default_env()
+                .filter_level(log::LevelFilter::Info) // Set the minimum log level
+                .init();
+
             let temp_dir = tempfile::Builder::new().prefix(&word).tempdir()?;
             let index_html = query(&word, temp_dir.path())?;
             add_history(&word).await?;
@@ -73,6 +98,7 @@ async fn main() -> Result<()> {
 }
 
 fn query(word: &str, base_dir: &Path) -> Result<PathBuf> {
+    info!("{word}");
     let (sender, receiver) = channel();
 
     load_dict()
@@ -91,8 +117,8 @@ fn query(word: &str, base_dir: &Path) -> Result<PathBuf> {
     let buttons: Vec<_> = receiver.iter().collect();
 
     if buttons.is_empty() {
-        eprintln!("{word} not found");
-        return Err(anyhow!("not found"));
+        error!("{word} not found");
+        return Err(anyhow!("{word} not found"));
     }
 
     let buttons_str = buttons.join("\n");
@@ -219,6 +245,16 @@ fn dictionary_dir() -> PathBuf {
 
 fn db_path() -> PathBuf {
     dictionary_dir().join("history.db")
+}
+
+fn log_dir() -> PathBuf {
+    let path = dirs::cache_dir().unwrap().join("mdict-cli-rs");
+    if !path.exists() {
+        create_dir(&path)
+            .with_context(|| format!("Failed to create directory {:?}", path))
+            .unwrap();
+    }
+    path
 }
 
 // load mdict or stardict

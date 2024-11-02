@@ -34,6 +34,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sqlx = { version = "0.8", features = [ "runtime-tokio", "sqlite" ] }
 shadow-rs = "0"
+env_logger = "0.11.5"
+log = "0.4.22"
 
 [build-dependencies]
 shadow-rs = "0"

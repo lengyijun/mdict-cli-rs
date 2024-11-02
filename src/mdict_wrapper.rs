@@ -4,6 +4,7 @@ use crate::T;
 use anyhow::anyhow;
 use anyhow::{Context, Result};
 use ego_tree::NodeRef;
+use log::*;
 use mdict::{KeyMaker, MDictBuilder};
 use scraper::{Html, Node};
 use std::path::Path;
@@ -88,13 +89,13 @@ impl T for Mdict {
                         .write_all(x.definition.as_bytes())?;
                 }
                 Ok(Ok(None)) => {
-                    eprintln!("{} failed to load {resource}", self.name());
+                    error!("{} failed to load {resource}", self.name());
                 }
                 Ok(Err(e)) => {
-                    eprintln!("{} failed to load {resource} {e}", self.name());
+                    error!("{} failed to load {resource} {e}", self.name());
                 }
                 Err(e) => {
-                    eprintln!("{:?} not exist; {e}", mdd_path);
+                    error!("{:?} not exist; {e}", mdd_path);
                 }
             }
         }
