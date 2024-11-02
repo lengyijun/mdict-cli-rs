@@ -70,13 +70,6 @@ impl SQLiteHistory {
         Ok(sh)
     }
 
-    async fn reset(&mut self, path: &Path) -> Result<SqlitePool> {
-        self.path = path.to_path_buf();
-        self.session_id = 0;
-        *self.row_id.lock().unwrap() = 0;
-        Ok(std::mem::replace(&mut self.conn, conn(&self.path).await?))
-    }
-
     async fn update_row_id(&mut self) -> Result<()> {
         let x = sqlx::query("SELECT ifnull(max(rowid), 0) FROM fsrs;")
             .fetch_one(&self.conn)
