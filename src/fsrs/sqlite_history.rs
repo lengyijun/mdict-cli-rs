@@ -29,8 +29,10 @@ pub struct SQLiteHistory {
     path: PathBuf,
     pub conn: SqlitePool, /* we need to keep a connection opened at least for in memory
                            * database and also for cached statement(s) */
-    session_id: i32,         // 0 means no new entry added
-    row_id: Arc<Mutex<i32>>, // max entry id
+    session_id: i32, // 0 means no new entry added
+    /// used in review
+    /// search next word to review from `row_id`
+    pub row_id: Option<i32>,
     pub fsrs: FSRS,
 }
 
@@ -63,20 +65,11 @@ impl SQLiteHistory {
             path,
             conn,
             session_id: 0,
-            row_id: Arc::new(Mutex::new(0)),
+            row_id: None,
             fsrs: FSRS::new(Parameters::default()),
         };
         sh.check_schema().await?;
         Ok(sh)
-    }
-
-    async fn update_row_id(&mut self) -> Result<()> {
-        let x = sqlx::query("SELECT ifnull(max(rowid), 0) FROM fsrs;")
-            .fetch_one(&self.conn)
-            .await?
-            .get::<i32, _>(0);
-        *self.row_id.lock().unwrap() = x;
-        Ok(())
     }
 
     async fn check_schema(&mut self) -> Result<()> {
@@ -137,9 +130,6 @@ COMMIT;
         if self.ignore_dups || user_version > 0 {
             self.set_ignore_dups().await?;
         }
-        if *self.row_id.lock().unwrap() == 0 && user_version > 0 {
-            self.update_row_id().await?;
-        }
         Ok(())
     }
 
@@ -199,8 +189,6 @@ COMMIT;
         .bind(serde_json::to_string(&card.last_review)?)
         .execute(&self.conn).await?;
 
-        let row_id = done.rows_affected();
-        *self.row_id.lock().unwrap() = row_id.try_into().unwrap();
         Ok(true)
     }
 

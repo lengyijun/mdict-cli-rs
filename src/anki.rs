@@ -24,7 +24,7 @@ pub async fn anki() -> Result<()> {
     let temp_dir = tempfile::Builder::new().prefix("review-").tempdir()?;
     let temp_dir_path = temp_dir.path().to_path_buf();
 
-    let spaced_repetition = SQLiteHistory::default().await;
+    let mut spaced_repetition = SQLiteHistory::default().await;
     let Ok(word) = spaced_repetition.next_to_review().await else {
         println!("no word to review");
         return Ok(());
@@ -217,7 +217,7 @@ pub async fn anki() -> Result<()> {
     });
 
     // async fn handler(Path(params): Path<Params>) -> impl IntoResponse {
-    let handler = async move |State(spaced_repetition): State<SQLiteHistory>,
+    let handler = async move |State(mut spaced_repetition): State<SQLiteHistory>,
                               Json(params): Json<Params>|
                 -> Json<Value> {
         let rating = rating_from_u8(params.rating);
