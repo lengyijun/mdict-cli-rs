@@ -144,6 +144,13 @@ pub async fn anki() -> Result<()> {
         }}
 
         function rate(rating) {{
+            /* hide buttons */
+            /* avoid double click */
+            document.getElementById('easy').style.display = 'none';
+            document.getElementById('good').style.display = 'none';
+            document.getElementById('hard').style.display = 'none';
+            document.getElementById('again').style.display = 'none';
+
             fetch("/ppppp", {{
                 method: 'POST',
                 headers: {{
