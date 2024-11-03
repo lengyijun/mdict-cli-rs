@@ -14,7 +14,11 @@
 2. install [carbonyl](https://github.com/fathyb/carbonyl)
 3. `cargo r -- awesome`
 
+### Search
 [![asciicast](https://asciinema.org/a/684675.svg)](https://asciinema.org/a/684675)
+
+### Review
+[![asciicast](https://asciinema.org/a/687030.svg)](https://asciinema.org/a/687030)
 
 ## Usage
 
@@ -23,7 +27,7 @@
 mdict-cli-rs <word>
 
 # anki-like review mode
-# open http://127.0.0.1:3333 in browser
+# you can also open http://127.0.0.1:3333 in browser manually
 mdict-cli-rs anki
 
 mdict-cli-rs --list-dicts
