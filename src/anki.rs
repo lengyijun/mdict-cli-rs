@@ -1,4 +1,5 @@
 use crate::fsrs::sqlite_history::SQLiteHistory;
+use crate::spaced_repetition;
 use crate::utils::create_sub_dir;
 use crate::utils::rating_from_u8;
 use crate::{query, spaced_repetition::SpacedRepetiton};
@@ -7,15 +8,19 @@ use axum::extract::State;
 use axum::routing::post;
 use axum::Json;
 use axum::Router;
+use crossbeam_channel::bounded;
+use futures::executor::block_on;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sqlx::Sqlite;
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::Write;
 use std::process::Command;
 use std::sync::mpsc::channel;
+use std::sync::Arc;
 use std::thread;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -207,6 +212,7 @@ pub async fn anki() -> Result<()> {
 
     File::create(temp_dir_path.join("index.html"))?.write_all(html.as_bytes())?;
     let (sender, receiver) = channel();
+    let (word_sender, word_receiver) = bounded(1);
 
     let server_thread = thread::spawn(move || {
         let _ = receiver.recv().unwrap();
@@ -216,28 +222,49 @@ pub async fn anki() -> Result<()> {
             .unwrap();
     });
 
+    let app_state = Arc::new(AppState {
+        spaced_repetition: spaced_repetition.clone(),
+        // rx: word_receiver.clone(),
+    });
+
+    let sqlite_thread = tokio::spawn(async move {
+        loop {
+            match block_on(spaced_repetition.next_to_review()) {
+                Ok(word) => {
+                    let p = create_sub_dir(&temp_dir_path, &word).unwrap();
+                    match query(&word, &p) {
+                        Ok(_) => {
+                            let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
+                            word_sender.send(Json(json!({ "word": word, "p" : filename })));
+                        }
+                        Err(_) => {
+                            word_sender.send(Json(json!({ "finished": true })));
+                            return;
+                        }
+                    }
+                }
+                _ => {
+                    word_sender.send(Json(json!({ "finished": true })));
+                    return;
+                }
+            }
+        }
+    });
+
     // async fn handler(Path(params): Path<Params>) -> impl IntoResponse {
-    let handler = async move |State(mut spaced_repetition): State<SQLiteHistory>,
+    let handler = async move |State(app_state): State<Arc<AppState>>,
                               Json(params): Json<Params>|
                 -> Json<Value> {
         let rating = rating_from_u8(params.rating);
         info!("{} {:?}", params.word, rating);
-        spaced_repetition
+        app_state
+            .spaced_repetition
             .update(&params.word, rating)
             .await
             .unwrap();
-        match spaced_repetition.next_to_review().await {
-            Ok(word) => {
-                let p = create_sub_dir(&temp_dir_path, &word).unwrap();
-                match query(&word, &p) {
-                    Ok(_) => {
-                        let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
-                        Json(json!({ "word": word, "p" : filename }))
-                    }
-                    Err(_) => Json(json!({ "finished": true })),
-                }
-            }
-            _ => Json(json!({ "finished": true })),
+        match word_receiver.recv() {
+            Ok(x) => x,
+            Err(_) => Json(json!({ "finished": true })),
         }
     };
 
@@ -246,7 +273,7 @@ pub async fn anki() -> Result<()> {
     let app = Router::new()
         .fallback_service(static_files_service)
         .route("/ppppp", post(handler))
-        .with_state(spaced_repetition)
+        .with_state(app_state)
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3333")
         .await
@@ -262,4 +289,10 @@ pub async fn anki() -> Result<()> {
 struct Params {
     word: String,
     rating: u8,
+}
+
+#[derive(Clone)]
+struct AppState {
+    spaced_repetition: SQLiteHistory,
+    // rx: crossbeam_channel::Receiver<Json<Value>>,
 }
