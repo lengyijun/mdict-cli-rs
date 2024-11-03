@@ -1,4 +1,4 @@
-//! copy and modified from https://github.com/vaaandark/dioxionary/blob/master/src/stardict.rs
+//! copy and modified from <https://github.com/vaaandark/dioxionary/blob/master/src/stardict.rs>
 //! Look up words form the offline stardicts.
 use crate::utils::create_sub_dir;
 use crate::utils::groom_name;

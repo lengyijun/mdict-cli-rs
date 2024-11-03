@@ -1,4 +1,4 @@
-//! https://github.com/kkawakam/rustyline/blob/master/src/sqlite_history.rs
+//! <https://github.com/kkawakam/rustyline/blob/master/src/sqlite_history.rs>
 //! History impl. based on SQLite
 use crate::db_path;
 use anyhow::Result;
