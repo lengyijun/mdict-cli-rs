@@ -29,7 +29,9 @@ pub struct SQLiteHistory {
     path: PathBuf,
     pub conn: SqlitePool, /* we need to keep a connection opened at least for in memory
                            * database and also for cached statement(s) */
-    session_id: i32, // 0 means no new entry added
+    /// used in anki mode: avoid re-review
+    /// 0 means no new entry added
+    pub session_id: i32,
     /// used in review
     /// search next word to review from `row_id`
     pub row_id: i32,
@@ -69,6 +71,7 @@ impl SQLiteHistory {
             fsrs: FSRS::new(Parameters::default()),
         };
         sh.check_schema().await?;
+        sh.create_session().await?;
         Ok(sh)
     }
 
@@ -204,8 +207,6 @@ COMMIT;
         if self.ignore(line) {
             return Ok(false);
         }
-        // Do not create a session until the first entry is added.
-        self.create_session().await?;
         self.add_entry(line, Card::new()).await
     }
 }
