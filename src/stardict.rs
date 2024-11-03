@@ -14,17 +14,6 @@ use std::fs::{self, read, File};
 use std::io::{prelude::*, BufReader};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug)]
-pub struct NotFoundError;
-
-impl fmt::Display for NotFoundError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NotFoundError")
-    }
-}
-
-impl Error for NotFoundError {}
-
 /// The stardict to be looked up.
 pub struct StarDict {
     ifo: Ifo,
@@ -318,8 +307,8 @@ impl Dict {
 
         match res {
             Ok(Some(res)) => Ok(res),
-            Ok(None) => Err(NotFoundError.into()),
-            Err(_error) => Err(NotFoundError.into()), // TODO: lost _error here
+            Ok(None) => Err(anyhow!("not found")),
+            Err(_error) => Err(anyhow!("not found")), // TODO: lost _error here
         }
     }
 }
