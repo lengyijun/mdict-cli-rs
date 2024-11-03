@@ -11,15 +11,13 @@ pub mod sqlite_history;
 
 impl SpacedRepetiton for sqlite_history::SQLiteHistory {
     async fn next_to_review(&mut self) -> Result<String> {
-        match self.row_id {
-            Some(row_id) => {
-                match  sqlx::query("SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' AND rowid > $1 ORDER BY RANDOM() LIMIT 1;")
-                .bind(row_id)
+        match  sqlx::query("SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' AND rowid > $1 ORDER BY RANDOM() LIMIT 1;")
+                .bind(self.row_id)
                 .fetch_one(&self.conn)
                 .await {
                     Ok(row) => {
+                        self.row_id = row.get(0);
                         let word: String = row.get(1);
-                        self.row_id = Some(row.get(0));
                         Ok(word)
                     }
                     Err(_) => {
@@ -27,21 +25,11 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
                         let row = sqlx::query("SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' ORDER BY RANDOM() LIMIT 1;")
                         .fetch_one(&self.conn)
                         .await?;
+                        self.row_id = row.get(0);
                         let word: String = row.get(1);
-                        self.row_id = Some(row.get(0));
                         Ok(word)
                     }
                 }
-            }
-            None => {
-                let row = sqlx::query("SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' ORDER BY RANDOM() LIMIT 1;")
-                .fetch_one(&self.conn)
-                .await?;
-                let word: String = row.get(1);
-                self.row_id = Some(row.get(0));
-                Ok(word)
-            }
-        }
     }
 
     async fn update(&self, question: &str, rating: Rating) -> Result<()> {

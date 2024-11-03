@@ -32,7 +32,7 @@ pub struct SQLiteHistory {
     session_id: i32, // 0 means no new entry added
     /// used in review
     /// search next word to review from `row_id`
-    pub row_id: Option<i32>,
+    pub row_id: i32,
     pub fsrs: FSRS,
 }
 
@@ -65,7 +65,7 @@ impl SQLiteHistory {
             path,
             conn,
             session_id: 0,
-            row_id: None,
+            row_id: -1,
             fsrs: FSRS::new(Parameters::default()),
         };
         sh.check_schema().await?;
