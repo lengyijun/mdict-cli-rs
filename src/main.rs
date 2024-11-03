@@ -34,6 +34,10 @@ shadow!(build);
 async fn main() -> Result<()> {
     let word = env::args().nth(1).unwrap();
     match &*word {
+        "--help" => {
+            println!("https://github.com/lengyijun/mdict-cli-rs/");
+            Ok(())
+        }
         "--version" => {
             println!("{}", build::VERSION); //print version const
             Ok(())
