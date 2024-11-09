@@ -124,10 +124,10 @@ pub async fn anki() -> Result<()> {
 
     <div class="footer">
         <button id="showanswer" class="button" onclick="showAnswer()">Show Answer</button>
-        <button id="easy"       class="button" onclick="rate(4)" style="display: none;">Easy</button>
-        <button id="good"       class="button" onclick="rate(3)" style="display: none;">Good</button>
-        <button id="hard"       class="button" onclick="rate(2)" style="display: none;">Hard</button>
         <button id="again"      class="button" onclick="rate(1)" style="display: none;">Again</button>
+        <button id="hard"       class="button" onclick="rate(2)" style="display: none;">Hard</button>
+        <button id="good"       class="button" onclick="rate(3)" style="display: none;">Good</button>
+        <button id="easy"       class="button" onclick="rate(4)" style="display: none;">Easy</button>
     </div>
 
     <script>
