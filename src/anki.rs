@@ -1,5 +1,4 @@
 use crate::fsrs::sqlite_history::SQLiteHistory;
-use crate::spaced_repetition;
 use crate::utils::create_sub_dir;
 use crate::utils::rating_from_u8;
 use crate::{query, spaced_repetition::SpacedRepetiton};
@@ -13,10 +12,7 @@ use futures::executor::block_on;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::Sqlite;
-use std::ffi::CString;
-use std::fs::{File, OpenOptions};
-use std::io::prelude::*;
+use std::fs::File;
 use std::io::Write;
 use std::process::Command;
 use std::sync::mpsc::channel;
@@ -214,7 +210,7 @@ pub async fn anki() -> Result<()> {
     let (sender, receiver) = channel();
     let (word_sender, word_receiver) = bounded(1);
 
-    let server_thread = thread::spawn(move || {
+    let _server_thread = thread::spawn(move || {
         let _ = receiver.recv().unwrap();
         let _ = Command::new("carbonyl")
             .arg("http://127.0.0.1:3333")
@@ -227,7 +223,7 @@ pub async fn anki() -> Result<()> {
         // rx: word_receiver.clone(),
     });
 
-    let sqlite_thread = tokio::spawn(async move {
+    let _sqlite_thread = tokio::spawn(async move {
         loop {
             match block_on(spaced_repetition.next_to_review()) {
                 Ok(word) => {
@@ -235,16 +231,16 @@ pub async fn anki() -> Result<()> {
                     match query(&word, &p) {
                         Ok(_) => {
                             let filename = p.file_name().unwrap().to_str().unwrap().to_owned();
-                            word_sender.send(Json(json!({ "word": word, "p" : filename })));
+                            let _ = word_sender.send(Json(json!({ "word": word, "p" : filename })));
                         }
                         Err(_) => {
-                            word_sender.send(Json(json!({ "finished": true })));
+                            let _ = word_sender.send(Json(json!({ "finished": true })));
                             return;
                         }
                     }
                 }
                 _ => {
-                    word_sender.send(Json(json!({ "finished": true })));
+                    let _ = word_sender.send(Json(json!({ "finished": true })));
                     return;
                 }
             }

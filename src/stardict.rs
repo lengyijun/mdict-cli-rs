@@ -4,12 +4,11 @@ use crate::utils::create_sub_dir;
 use crate::utils::groom_name;
 use crate::T;
 use anyhow::{anyhow, Context, Result};
-use eio::{FromBytes, ToBytes};
+use eio::FromBytes;
 use flate2::read::GzDecoder;
-use std::borrow::Cow;
 use std::cell::OnceCell;
 use std::error::Error;
-use std::fmt::{self, Debug, Display};
+use std::fmt::{Debug, Display};
 use std::fs::{self, read, File};
 use std::io::{prelude::*, BufReader};
 use std::path::{Path, PathBuf};
@@ -22,18 +21,17 @@ pub struct StarDict {
 }
 
 /// A word entry of the stardict.
-pub struct Entry<'a> {
+pub struct Entry {
     pub word: String,
-    pub trans: Cow<'a, str>,
 }
 
 // only used in fuzzy search selection
-pub struct EntryWrapper<'a, 'b> {
+pub struct EntryWrapper<'b> {
     pub dict_name: &'b str,
-    pub entry: Entry<'a>,
+    pub entry: Entry,
 }
 
-impl std::fmt::Display for EntryWrapper<'_, '_> {
+impl std::fmt::Display for EntryWrapper<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{} {}", self.entry.word, self.dict_name)
     }
@@ -65,50 +63,11 @@ impl StarDict {
             .items
             .binary_search_by(|probe| probe.0.to_lowercase().cmp(&word))
         {
-            let (word, offset, size) = &self.idx.items[pos];
+            let (_word, offset, size) = &self.idx.items[pos];
             self.dict.get(*offset, *size).ok()
         } else {
             None
         }
-    }
-
-    fn fuzzy_lookup(&self, target_word: &str) -> Vec<Entry> {
-        fn strip_punctuation(w: &str) -> String {
-            w.to_lowercase()
-                .chars()
-                .filter(|c| !c.is_ascii_punctuation() && !c.is_whitespace())
-                .collect()
-        }
-
-        let target_word = strip_punctuation(target_word);
-        // bury vs buried
-        let mut min_dist = 3;
-        let mut res: Vec<&(String, usize, usize)> = Vec::new();
-
-        for x in self.idx.items.iter() {
-            let (word, _offset, _size) = x;
-            let dist = strsim::levenshtein(&target_word, &strip_punctuation(word));
-            match dist.cmp(&min_dist) {
-                std::cmp::Ordering::Less => {
-                    min_dist = dist;
-                    res.clear();
-                    res.push(x);
-                }
-                std::cmp::Ordering::Equal => {
-                    res.push(x);
-                }
-                std::cmp::Ordering::Greater => {}
-            }
-        }
-
-        res.into_iter()
-            .flat_map(|(word, offset, size)| {
-                Ok::<Entry<'_>, anyhow::Error>(Entry {
-                    word: word.to_string(),
-                    trans: std::borrow::Cow::Borrowed(self.dict.get(*offset, *size)?),
-                })
-            })
-            .collect()
     }
 
     fn dict_name(&self) -> &str {
@@ -364,23 +323,6 @@ impl Idx {
             }
         }
         Ok(Self { items })
-    }
-
-    pub fn write_bytes<const N: usize, T>(path: PathBuf, v: Vec<(String, T, T)>) -> Result<()>
-    where
-        T: FromBytes<N> + ToBytes<N> + TryInto<usize>,
-        <T as TryInto<usize>>::Error: Debug,
-    {
-        let mut f =
-            File::create(&path).with_context(|| format!("Failed to create idx file {:?}", path))?;
-
-        for (word, offset, size) in v {
-            f.write_all(word.as_bytes())?;
-            f.write_all(&[0])?;
-            f.write_all(&offset.to_be_bytes())?;
-            f.write_all(&size.to_be_bytes())?;
-        }
-        Ok(())
     }
 
     fn new(path: PathBuf, version: Version) -> Result<Idx> {

@@ -10,8 +10,6 @@ use sqlx::sqlite::SqlitePool;
 use sqlx::Row;
 use sqlx::Sqlite;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::Mutex;
 
 /// 只在 非交互式的 情况下使用
 pub async fn add_history(word: &str) -> Result<()> {
@@ -26,7 +24,6 @@ pub struct SQLiteHistory {
     max_len: usize,
     ignore_space: bool,
     ignore_dups: bool,
-    path: PathBuf,
     pub conn: SqlitePool, /* we need to keep a connection opened at least for in memory
                            * database and also for cached statement(s) */
     /// used in anki mode: avoid re-review
@@ -64,7 +61,6 @@ impl SQLiteHistory {
             ignore_space: true,
             // not strictly consecutive...
             ignore_dups: true,
-            path,
             conn,
             session_id: 0,
             row_id: -1,
@@ -178,7 +174,7 @@ COMMIT;
     async fn add_entry(&mut self, word: &str, card: Card) -> Result<bool> {
         // ignore SQLITE_CONSTRAINT_UNIQUE
 
-        let done = sqlx::query("INSERT OR REPLACE INTO fsrs (session_id, word, due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_review) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING rowid;")
+        let _done = sqlx::query("INSERT OR REPLACE INTO fsrs (session_id, word, due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_review) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING rowid;")
         .bind(self.session_id)
         .bind(word)
         .bind(serde_json::to_string(&card.due)?)
@@ -193,14 +189,6 @@ COMMIT;
         .execute(&self.conn).await?;
 
         Ok(true)
-    }
-
-    pub async fn delete(&self, term: &str) -> Result<usize> {
-        let done = sqlx::query("DELETE FROM fsrs WHERE word=$1;")
-            .bind(term)
-            .execute(&self.conn)
-            .await?;
-        Ok(done.rows_affected().try_into().unwrap())
     }
 
     pub async fn add(&mut self, line: &str) -> Result<bool> {

@@ -56,14 +56,6 @@ impl SpacedRepetiton for sqlite_history::SQLiteHistory {
             .context("update fail")?;
         Ok(())
     }
-
-    async fn remove(&mut self, question: &str) -> Result<()> {
-        sqlx::query("DELETE FROM fsrs WHERE word = $1")
-            .bind(question)
-            .fetch_one(&self.conn)
-            .await?;
-        Ok(())
-    }
 }
 
 async fn update(pool: &SqlitePool, word: &str, card: Card) -> Result<()> {
