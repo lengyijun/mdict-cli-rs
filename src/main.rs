@@ -1,16 +1,16 @@
 #![feature(async_closure)]
 
+use crate::fsrs::sqlite_history::add_history;
 use crate::mdict_wrapper::Mdict;
+use crate::stardict::StarDict;
 use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::prelude::*;
 use env_logger::Target;
-use fsrs::sqlite_history::add_history;
 use log::*;
 use rayon::prelude::*;
 use shadow_rs::shadow;
-use stardict::StarDict;
 use std::ffi::OsStr;
 use std::fs::create_dir;
 use std::fs::OpenOptions;
