@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rs_fsrs::Rating;
 
-pub trait SpacedRepetiton: Sized {
+pub trait SpacedRepetition: Sized {
     /// find next reviewable word
     async fn next_to_review(&mut self) -> Result<String>;
 

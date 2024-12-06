@@ -1,4 +1,4 @@
-use crate::spaced_repetition::SpacedRepetiton;
+use crate::spaced_repetition::SpacedRepetition;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::Utc;
@@ -9,7 +9,7 @@ use sqlx::SqlitePool;
 
 pub mod sqlite_history;
 
-impl SpacedRepetiton for sqlite_history::SQLiteHistory {
+impl SpacedRepetition for sqlite_history::SQLiteHistory {
     async fn next_to_review(&mut self) -> Result<String> {
         match sqlx::query("SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' AND session_id != $1 AND rowid > $2 ORDER BY RANDOM() LIMIT 1;")
                 .bind(self.session_id)

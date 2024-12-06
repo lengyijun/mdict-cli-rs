@@ -1,7 +1,7 @@
 use crate::fsrs::sqlite_history::SQLiteHistory;
 use crate::utils::create_sub_dir;
 use crate::utils::rating_from_u8;
-use crate::{query, spaced_repetition::SpacedRepetiton};
+use crate::{query, spaced_repetition::SpacedRepetition};
 use anyhow::Result;
 use axum::extract::State;
 use axum::routing::post;
