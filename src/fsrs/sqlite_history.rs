@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 /// 只在 非交互式的 情况下使用
 pub async fn add_history(word: &str) -> Result<()> {
     let mut d = crate::fsrs::sqlite_history::SQLiteHistory::default().await;
-    d.add(word).await?;
+    d.insert_or_ignore(word).await?;
     Ok(())
 }
 
@@ -169,6 +169,28 @@ COMMIT;
         }
         // ignore_dups => SQLITE_CONSTRAINT_UNIQUE
         false
+    }
+
+    async fn insert_or_ignore(&mut self, word: &str) -> Result<bool> {
+        let card = Card::new();
+
+        // ignore SQLITE_CONSTRAINT_UNIQUE
+
+        let _sqlite_query_result = sqlx::query("INSERT OR IGNORE INTO fsrs (session_id, word, due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_review) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING rowid;")
+        .bind(self.session_id)
+        .bind(word)
+        .bind(serde_json::to_string(&card.due)?)
+        .bind(card.stability)
+        .bind(card.difficulty)
+        .bind(card.elapsed_days)
+        .bind(card.scheduled_days)
+        .bind(card.reps)
+        .bind(card.lapses)
+        .bind(serde_json::to_string(&card.state)?)
+        .bind(serde_json::to_string(&card.last_review)?)
+        .execute(&self.conn).await?;
+
+        Ok(true)
     }
 
     async fn add_entry(&mut self, word: &str, card: Card) -> Result<bool> {
