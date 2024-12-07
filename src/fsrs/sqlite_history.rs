@@ -174,7 +174,7 @@ COMMIT;
     async fn add_entry(&mut self, word: &str, card: Card) -> Result<bool> {
         // ignore SQLITE_CONSTRAINT_UNIQUE
 
-        let _done = sqlx::query("INSERT OR REPLACE INTO fsrs (session_id, word, due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_review) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING rowid;")
+        let _sqlite_query_result = sqlx::query("INSERT OR REPLACE INTO fsrs (session_id, word, due, stability, difficulty, elapsed_days, scheduled_days, reps, lapses, state, last_review) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING rowid;")
         .bind(self.session_id)
         .bind(word)
         .bind(serde_json::to_string(&card.due)?)
