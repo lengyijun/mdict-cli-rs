@@ -36,6 +36,9 @@ mdict-cli-rs anki
 mdict-cli-rs anki football
 mdict-cli-rs anki football plant
 
+# review all words in all folders
+mdict-cli-rs anki all
+
 mdict-cli-rs --list-dicts
 mdict-cli-rs --show-path
 ```

@@ -29,8 +29,12 @@ pub async fn anki(folders: Option<&[&str]>) -> Result<()> {
     let mut spaced_repetition = SQLiteHistory::default().await;
     if let Some(folders) = folders {
         let mut all = HashSet::new();
-        for f in folders {
-            all.extend(favorites_words(f)?);
+        for &f in folders {
+            if f == "all" {
+                all.extend(favorites_all_words()?);
+            } else {
+                all.extend(favorites_words(f)?);
+            }
         }
         spaced_repetition.allowed = Some(all);
     }
@@ -302,17 +306,36 @@ struct AppState {
 }
 
 fn favorites_words(folder: &str) -> Result<HashSet<String>> {
-    let path = dirs::config_dir().unwrap().join("goldendict/favorites");
-    let content = std::fs::read_to_string(&path)?;
+    let content = std::fs::read_to_string(favorites_path())?;
     let document = scraper::Html::parse_document(&content);
     let folder_sel =
         scraper::Selector::parse(&format!(r#"folder[name="{}"]"#, folder)).unwrap();
-    let word_sel = scraper::Selector::parse("headword").unwrap();
     let mut words = HashSet::new();
     if let Some(f) = document.select(&folder_sel).next() {
-        for w in f.select(&word_sel) {
-            words.insert(w.text().collect::<String>());
-        }
+        words.extend(headwords(f));
     }
     Ok(words)
+}
+
+fn favorites_all_words() -> Result<HashSet<String>> {
+    let content = std::fs::read_to_string(favorites_path())?;
+    let document = scraper::Html::parse_document(&content);
+    let folder_sel = scraper::Selector::parse("folder").unwrap();
+    let mut words = HashSet::new();
+    for f in document.select(&folder_sel) {
+        words.extend(headwords(f));
+    }
+    Ok(words)
+}
+
+fn favorites_path() -> std::path::PathBuf {
+    dirs::config_dir().unwrap().join("goldendict/favorites")
+}
+
+fn headwords(folder: scraper::element_ref::ElementRef) -> HashSet<String> {
+    let word_sel = scraper::Selector::parse("headword").unwrap();
+    folder
+        .select(&word_sel)
+        .map(|w| w.text().collect::<String>())
+        .collect()
 }
