@@ -30,9 +30,11 @@ mdict-cli-rs <word>
 # you can also open http://127.0.0.1:3333 in browser manually
 mdict-cli-rs anki
 
-# review only words in a goldendict favorites folder
+# review only words in goldendict favorites folders
 # reads ~/.config/goldendict/favorites
+# multiple folders are merged
 mdict-cli-rs anki football
+mdict-cli-rs anki football plant
 
 mdict-cli-rs --list-dicts
 mdict-cli-rs --show-path

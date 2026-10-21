@@ -78,8 +78,13 @@ async fn main() -> Result<()> {
                 .target(Target::Pipe(log_file))
                 .filter_level(log::LevelFilter::Info) // Set the minimum log level
                 .init();
-            let folder = env::args().nth(2);
-            anki::anki(folder.as_deref()).await?;
+            let folders: Vec<_> = env::args().skip(2).collect();
+            let folders: Option<Vec<&str>> = if folders.is_empty() {
+                None
+            } else {
+                Some(folders.iter().map(String::as_str).collect())
+            };
+            anki::anki(folders.as_deref()).await?;
             Ok(())
         }
         _ => {

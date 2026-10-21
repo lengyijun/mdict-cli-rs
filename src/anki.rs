@@ -22,13 +22,17 @@ use std::thread;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-pub async fn anki(folder: Option<&str>) -> Result<()> {
+pub async fn anki(folders: Option<&[&str]>) -> Result<()> {
     let temp_dir = tempfile::Builder::new().prefix("review-").tempdir()?;
     let temp_dir_path = temp_dir.path().to_path_buf();
 
     let mut spaced_repetition = SQLiteHistory::default().await;
-    if let Some(folder) = folder {
-        spaced_repetition.allowed = Some(favorites_words(folder)?);
+    if let Some(folders) = folders {
+        let mut all = HashSet::new();
+        for f in folders {
+            all.extend(favorites_words(f)?);
+        }
+        spaced_repetition.allowed = Some(all);
     }
     let Ok(word) = spaced_repetition.next_to_review().await else {
         println!("no word to review");
