@@ -1,5 +1,3 @@
-#![feature(async_closure)]
-
 use crate::fsrs::sqlite_history::add_history;
 use crate::mdict_wrapper::Mdict;
 use crate::stardict::StarDict;
@@ -80,7 +78,8 @@ async fn main() -> Result<()> {
                 .target(Target::Pipe(log_file))
                 .filter_level(log::LevelFilter::Info) // Set the minimum log level
                 .init();
-            anki::anki().await?;
+            let folder = env::args().nth(2);
+            anki::anki(folder.as_deref()).await?;
             Ok(())
         }
         _ => {

@@ -20,23 +20,6 @@ pub struct StarDict {
     dict: Dict,
 }
 
-/// A word entry of the stardict.
-pub struct Entry {
-    pub word: String,
-}
-
-// only used in fuzzy search selection
-pub struct EntryWrapper<'b> {
-    pub dict_name: &'b str,
-    pub entry: Entry,
-}
-
-impl std::fmt::Display for EntryWrapper<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{} {}", self.entry.word, self.dict_name)
-    }
-}
-
 impl StarDict {
     pub fn dz(dz_path: &Path) -> Result<StarDict> {
         let ifo = Ifo::new(dz_path.with_extension("ifo"))?;

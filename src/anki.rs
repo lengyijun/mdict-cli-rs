@@ -12,6 +12,7 @@ use futures::executor::block_on;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
 use std::process::Command;
@@ -21,11 +22,14 @@ use std::thread;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-pub async fn anki() -> Result<()> {
+pub async fn anki(folder: Option<&str>) -> Result<()> {
     let temp_dir = tempfile::Builder::new().prefix("review-").tempdir()?;
     let temp_dir_path = temp_dir.path().to_path_buf();
 
     let mut spaced_repetition = SQLiteHistory::default().await;
+    if let Some(folder) = folder {
+        spaced_repetition.allowed = Some(favorites_words(folder)?);
+    }
     let Ok(word) = spaced_repetition.next_to_review().await else {
         println!("no word to review");
         return Ok(());
@@ -291,4 +295,20 @@ struct Params {
 struct AppState {
     spaced_repetition: SQLiteHistory,
     // rx: crossbeam_channel::Receiver<Json<Value>>,
+}
+
+fn favorites_words(folder: &str) -> Result<HashSet<String>> {
+    let path = dirs::config_dir().unwrap().join("goldendict/favorites");
+    let content = std::fs::read_to_string(&path)?;
+    let document = scraper::Html::parse_document(&content);
+    let folder_sel =
+        scraper::Selector::parse(&format!(r#"folder[name="{}"]"#, folder)).unwrap();
+    let word_sel = scraper::Selector::parse("headword").unwrap();
+    let mut words = HashSet::new();
+    if let Some(f) = document.select(&folder_sel).next() {
+        for w in f.select(&word_sel) {
+            words.insert(w.text().collect::<String>());
+        }
+    }
+    Ok(words)
 }

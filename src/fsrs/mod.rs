@@ -11,39 +11,10 @@ pub mod sqlite_history;
 
 impl SpacedRepetition for sqlite_history::SQLiteHistory {
     async fn next_to_review(&mut self) -> Result<String> {
-        match sqlx::query("SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' AND session_id != $1 AND rowid > $2 ORDER BY RANDOM() LIMIT 1;")
-                .bind(self.session_id)
-                .bind(self.row_id)
-                .fetch_one(&self.conn)
-                .await {
-                    Ok(row) => {
-                        self.row_id = row.get(0);
-                        let word: String = row.get(1);
-
-                        sqlx::query("UPDATE fsrs SET session_id = $2 WHERE word = $1")
-                            .bind(&word)
-                            .bind(self.session_id)
-                            .execute(&self.conn)
-                            .await?;
-                        Ok(word)
-                    }
-                    Err(_) => {
-                        // search from start
-                        let row = sqlx::query("SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' AND session_id != $1 ORDER BY RANDOM() LIMIT 1;")
-                            .bind(self.session_id)
-                            .fetch_one(&self.conn)
-                            .await?;
-                        self.row_id = row.get(0);
-                        let word: String = row.get(1);
-
-                        sqlx::query("UPDATE fsrs SET session_id = $2 WHERE word = $1")
-                            .bind(&word)
-                            .bind(self.session_id)
-                            .execute(&self.conn)
-                            .await?;
-                        Ok(word)
-                    }
-                }
+        if let Some(word) = self.next_allowed().await? {
+            return Ok(word);
+        }
+        Err(anyhow::anyhow!("no word to review"))
     }
 
     async fn update(&self, question: &str, rating: Rating) -> Result<()> {
@@ -55,6 +26,53 @@ impl SpacedRepetition for sqlite_history::SQLiteHistory {
             .await
             .context("update fail")?;
         Ok(())
+    }
+}
+
+impl sqlite_history::SQLiteHistory {
+    async fn next_allowed(&mut self) -> Result<Option<String>> {
+        let allowed = self.allowed.clone();
+        let (extra, _) = match &allowed {
+            Some(a) if !a.is_empty() => {
+                let phs = vec!["?"; a.len()].join(",");
+                (format!(" AND word IN ({})", phs), a.len())
+            }
+            _ => (String::new(), 0),
+        };
+
+        let query1 = format!(
+            "SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' AND session_id != ? AND rowid > ?{} ORDER BY RANDOM() LIMIT 1;",
+            extra
+        );
+        let query2 = format!(
+            "SELECT rowid, word FROM fsrs WHERE timediff('now', substr(due, 2, length(due) - 2)) LIKE '+%' AND session_id != ?{} ORDER BY RANDOM() LIMIT 1;",
+            extra
+        );
+
+        for (query, include_rowid) in [(&query1, true), (&query2, false)] {
+            let mut b = sqlx::query(query);
+            b = b.bind(self.session_id);
+            if include_rowid {
+                b = b.bind(self.row_id);
+            }
+            if let Some(a) = &allowed {
+                for w in a {
+                    b = b.bind(w.as_str());
+                }
+            }
+            if let Ok(row) = b.fetch_one(&self.conn).await {
+                let rowid: i32 = row.get(0);
+                let word: String = row.get(1);
+                self.row_id = rowid;
+                sqlx::query("UPDATE fsrs SET session_id = ? WHERE word = ?")
+                    .bind(self.session_id)
+                    .bind(&word)
+                    .execute(&self.conn)
+                    .await?;
+                return Ok(Some(word));
+            }
+        }
+        Ok(None)
     }
 }
 

@@ -6,6 +6,7 @@ use rs_fsrs::Card;
 use rs_fsrs::Parameters;
 use rs_fsrs::FSRS;
 use sqlx::migrate::MigrateDatabase;
+use std::collections::HashSet;
 use sqlx::sqlite::SqlitePool;
 use sqlx::Row;
 use sqlx::Sqlite;
@@ -31,6 +32,8 @@ pub struct SQLiteHistory {
     /// search next word to review from `row_id`
     pub row_id: i32,
     pub fsrs: FSRS,
+    /// restrict review to these words (e.g. a goldendict favorites folder)
+    pub allowed: Option<HashSet<String>>,
 }
 
 /*
@@ -61,6 +64,7 @@ impl SQLiteHistory {
             session_id: 0,
             row_id: -1,
             fsrs: FSRS::new(Parameters::default()),
+            allowed: None,
         };
         sh.check_schema().await?;
         sh.create_session().await?;
